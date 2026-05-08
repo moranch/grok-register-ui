@@ -1,8 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { useStatus } from '@/hooks/use-status'
-import { useSystemConfig } from '@/hooks/use-system-config'
+import { GrokLogo } from '@/components/grok-logo'
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -20,21 +19,21 @@ type SystemBrandProps = {
   variant?: 'sidebar' | 'inline'
 }
 
+const BRAND_NAME = 'Grok Register'
+const BRAND_SUBTITLE = 'Console'
+
 /**
  * System brand component
- * Displays current system logo + name.
- * - inline: compact pill in the top app bar; clicking navigates to home (/)
- * - sidebar: stacked card in the sidebar header (display only)
+ *
+ * 直接使用 GrokLogo SVG 组件 + 固定品牌文案，不再依赖后端 /api/status
+ * - inline: 顶部应用栏的紧凑 pill 样式，点击回首页
+ * - sidebar: 侧边栏 header 的堆叠卡片
  */
 export function SystemBrand(props: SystemBrandProps) {
   const { t } = useTranslation()
-  const { status } = useStatus()
-  const { logo } = useSystemConfig()
-
   const variant = props.variant ?? 'sidebar'
-  const name = status?.system_name || props.defaultName || 'New API'
-  const version =
-    status?.version || props.defaultVersion || t('Unknown version')
+  const name = props.defaultName || BRAND_NAME
+  const version = props.defaultVersion || BRAND_SUBTITLE
 
   if (variant === 'inline') {
     return (
@@ -46,13 +45,7 @@ export function SystemBrand(props: SystemBrandProps) {
           'hover:bg-accent focus-visible:ring-ring/40 focus-visible:ring-2'
         )}
       >
-        <div className='flex size-5 items-center justify-center overflow-hidden rounded-md'>
-          <img
-            src={logo}
-            alt={t('Logo')}
-            className='size-full rounded-md object-cover'
-          />
-        </div>
+        <GrokLogo className='size-5 shrink-0' />
         <span className='max-w-[12rem] truncate'>{name}</span>
       </Link>
     )
@@ -66,16 +59,12 @@ export function SystemBrand(props: SystemBrandProps) {
           className='hover:text-sidebar-foreground active:text-sidebar-foreground cursor-default hover:bg-transparent active:bg-transparent'
           render={<div />}
         >
-          <div className='flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg'>
-            <img
-              src={logo}
-              alt={t('Logo')}
-              className='size-full rounded-lg object-cover'
-            />
-          </div>
+          <GrokLogo className='size-8 shrink-0' />
           <div className='grid flex-1 text-start text-sm leading-tight group-data-[collapsible=icon]:hidden'>
             <span className='truncate font-semibold'>{name}</span>
-            <span className='truncate text-xs'>{version}</span>
+            <span className='text-muted-foreground truncate text-xs'>
+              {version}
+            </span>
           </div>
         </SidebarMenuButton>
       </SidebarMenuItem>

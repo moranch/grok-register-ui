@@ -3,9 +3,9 @@ import {
   ListTodo,
   HeartPulse,
   Settings,
-  Command,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { GrokLogo } from '@/components/grok-logo'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
 import { type SidebarData } from '@/components/layout/types'
 
@@ -17,7 +17,7 @@ export function useSidebarData(): SidebarData {
       {
         id: WORKSPACE_IDS.DEFAULT,
         name: 'Grok Register',
-        logo: Command,
+        logo: GrokLogo,
         plan: 'Console',
       },
     ],

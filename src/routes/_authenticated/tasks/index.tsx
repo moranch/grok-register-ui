@@ -587,10 +587,38 @@ function statusColor(status: string): string {
 
 function phaseColor(phase: string): string {
   if (!phase) return 'text-muted-foreground'
-  if (phase === 'success')
+
+  // 成功类（绿色）
+  if (phase === 'success' || phase === 'pushed_to_api') {
     return 'text-emerald-600 dark:text-emerald-400'
-  if (phase === 'error' || phase === 'failed')
+  }
+  // 错误类（红色）
+  if (phase === 'error' || phase === 'failed') {
     return 'text-red-600 dark:text-red-400'
+  }
+  // 进行中（蓝色） - 注册主要步骤
+  if (
+    phase === 'starting_round' ||
+    phase === 'process_started' ||
+    phase === 'mailbox_created' ||
+    phase === 'email_submitted'
+  ) {
+    return 'text-sky-600 dark:text-sky-400'
+  }
+  // 验证流程（紫色） - OTP / 验证码 / Turnstile
+  if (
+    phase === 'otp_received' ||
+    phase === 'turnstile_solved' ||
+    phase === 'profile_page' ||
+    phase === 'submitting_profile'
+  ) {
+    return 'text-violet-600 dark:text-violet-400'
+  }
+  // 等待 / 停止类（琥珀色）
+  if (phase === 'queued' || phase === 'stopping' || phase === 'stopped') {
+    return 'text-amber-600 dark:text-amber-400'
+  }
+  // 其他未知阶段 - 用主题前景色（比默认 muted 更显眼）
   return 'text-foreground'
 }
 
