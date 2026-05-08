@@ -384,46 +384,60 @@ function TaskDetail({
         )}
       </CardHeader>
       <CardContent className='space-y-6'>
-        {/* 3 个统计卡片 */}
-        <div className='grid gap-4 md:grid-cols-3'>
+        {/* 6 个紧凑的状态卡片（对齐原版布局） */}
+        <div className='grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6'>
           <StatBox label='状态'>
-            <Badge variant={statusVariant(task.status)}>
-              {statusIcon(task.status)}
+            <span className={cn('text-lg font-semibold', statusColor(task.status))}>
               {task.status}
-            </Badge>
+            </span>
           </StatBox>
-          <StatBox label='成功/目标'>
-            <div className='text-3xl font-bold text-emerald-600 dark:text-emerald-400'>
+          <StatBox label='目标次数'>
+            <span className='text-lg font-semibold'>{task.target_count}</span>
+          </StatBox>
+          <StatBox label='成功数'>
+            <span className='text-lg font-semibold text-emerald-600 dark:text-emerald-400'>
               {task.completed_count}
-              <span className='text-muted-foreground text-base font-normal'>
-                /{task.target_count}
-              </span>
-            </div>
+            </span>
           </StatBox>
           <StatBox label='失败数'>
-            <div
+            <span
               className={cn(
-                'text-3xl font-bold',
+                'text-lg font-semibold',
                 task.failed_count > 0
                   ? 'text-red-600 dark:text-red-400'
                   : 'text-muted-foreground'
               )}
             >
               {task.failed_count}
-            </div>
+            </span>
+          </StatBox>
+          <StatBox label='当前轮次'>
+            <span className='text-lg font-semibold'>
+              {task.current_round || 0}
+            </span>
+          </StatBox>
+          <StatBox label='当前阶段'>
+            <span
+              className={cn(
+                'truncate text-lg font-semibold',
+                phaseColor(task.current_phase)
+              )}
+              title={task.current_phase || '-'}
+            >
+              {task.current_phase || '-'}
+            </span>
           </StatBox>
         </div>
 
-        {/* 3 个辅助信息 */}
-        <div className='grid gap-4 md:grid-cols-3'>
-          <InfoItem label='当前轮次' value={String(task.current_round || 0)} />
-          <InfoItem label='当前阶段' value={task.current_phase || '-'} />
-          <InfoItem
-            label='最近邮箱'
-            value={task.last_email || '-'}
-            mono
-          />
-        </div>
+        {/* 最近邮箱单独一行 */}
+        {task.last_email && (
+          <div className='text-muted-foreground flex items-center gap-2 text-sm'>
+            <span>最近邮箱：</span>
+            <span className='text-foreground font-mono text-xs'>
+              {task.last_email}
+            </span>
+          </div>
+        )}
 
         {/* 错误信息 */}
         {task.last_error && (
@@ -493,11 +507,11 @@ function StatBox({
   children: React.ReactNode
 }) {
   return (
-    <div className='bg-card rounded-xl border p-4 shadow-sm'>
-      <div className='text-muted-foreground mb-2 text-xs tracking-wider uppercase'>
+    <div className='bg-card rounded-lg border px-3 py-2.5 shadow-sm'>
+      <div className='text-muted-foreground mb-1 text-[10px] tracking-wider uppercase'>
         {label}
       </div>
-      <div>{children}</div>
+      <div className='flex items-center'>{children}</div>
     </div>
   )
 }
@@ -525,6 +539,33 @@ function InfoItem({
       </div>
     </div>
   )
+}
+
+function statusColor(status: string): string {
+  switch (status) {
+    case 'completed':
+      return 'text-emerald-600 dark:text-emerald-400'
+    case 'running':
+      return 'text-sky-600 dark:text-sky-400'
+    case 'failed':
+      return 'text-red-600 dark:text-red-400'
+    case 'queued':
+      return 'text-amber-600 dark:text-amber-400'
+    case 'stopping':
+    case 'stopped':
+      return 'text-muted-foreground'
+    default:
+      return 'text-foreground'
+  }
+}
+
+function phaseColor(phase: string): string {
+  if (!phase) return 'text-muted-foreground'
+  if (phase === 'success')
+    return 'text-emerald-600 dark:text-emerald-400'
+  if (phase === 'error' || phase === 'failed')
+    return 'text-red-600 dark:text-red-400'
+  return 'text-foreground'
 }
 
 function statusIcon(status: string) {
