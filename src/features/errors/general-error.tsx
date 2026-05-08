@@ -23,28 +23,33 @@ export function GeneralError({
 
   return (
     <div className={cn('h-svh w-full', className)}>
-      <div className='m-auto flex h-full w-full flex-col items-center justify-center gap-2'>
+      <div className='m-auto flex h-full w-full flex-col items-center justify-center gap-3 px-6'>
         {!minimal && (
-          <h1 className='text-[7rem] leading-tight font-bold'>500</h1>
+          <h1 className='text-[5rem] leading-tight font-bold'>500</h1>
         )}
         <span className='font-medium'>
           {t('页面出错了')} {`:')`}
         </span>
-        <p className='text-muted-foreground text-center'>
-          {t('页面渲染异常，常见原因：浏览器翻译插件或扩展改动了 DOM。')}
-          <br />
-          {t('建议：关闭中文翻译后刷新页面。')}
-        </p>
+        <div className='text-muted-foreground max-w-md space-y-1 text-center text-sm'>
+          <p>{t('常见原因：浏览器翻译插件 / 扩展修改了页面 DOM。')}</p>
+          <p className='text-xs'>
+            {t('请尝试关闭 Chrome 中文翻译、Grammarly、Dark Reader 等扩展，然后刷新。')}
+          </p>
+        </div>
         {!minimal && (
-          <div className='mt-6 flex flex-wrap justify-center gap-4'>
-            <Button variant='outline' onClick={() => history.go(-1)}>
+          <div className='mt-4 flex flex-wrap justify-center gap-2'>
+            <Button variant='outline' size='sm' onClick={() => history.go(-1)}>
               {t('返回')}
             </Button>
-            <Button variant='outline' onClick={reload}>
-              {t('刷新')}
+            <Button size='sm' onClick={reload}>
+              {t('刷新页面')}
             </Button>
-            <Button onClick={() => navigate({ to: '/' })}>
-              {t('回到首页')}
+            <Button
+              variant='ghost'
+              size='sm'
+              onClick={() => navigate({ to: '/dashboard' })}
+            >
+              {t('回到仪表盘')}
             </Button>
           </div>
         )}

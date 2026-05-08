@@ -398,18 +398,27 @@ function TaskDetail({
 
   return (
     <Card>
-      <CardHeader className='flex-row items-center justify-between'>
+      <CardHeader>
         <CardTitle className='text-base'>
           任务 #{task.id} · {task.name}
         </CardTitle>
-        {isRunning && (
-          <Button variant='destructive' size='sm' onClick={onStop}>
-            <Square size={14} />
-            停止任务
-          </Button>
-        )}
       </CardHeader>
-      <CardContent className='space-y-6'>
+      <CardContent className='space-y-4'>
+        {/* 停止按钮 - 单独一行放在状态卡片上方 */}
+        {isRunning && (
+          <div className='rounded-lg border border-red-200 bg-red-50 p-2 dark:border-red-900/40 dark:bg-red-900/10'>
+            <Button
+              variant='destructive'
+              size='sm'
+              className='w-full'
+              onClick={onStop}
+            >
+              <Square size={14} />
+              停止任务
+            </Button>
+          </div>
+        )}
+
         {/* 6 个紧凑的状态卡片（对齐原版布局） */}
         <div className='grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6'>
           <StatBox label='状态'>
