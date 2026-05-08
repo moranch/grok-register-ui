@@ -51,6 +51,15 @@ function TasksPage() {
   const [form, setForm] = useState({ name: '', count: 50, notes: '' })
   const [creating, setCreating] = useState(false)
 
+  // 生成默认任务名：grok-task-<13位时间戳>
+  const genDefaultName = () => `grok-task-${Date.now()}`
+
+  // 打开新建表单时自动填一个默认任务名
+  const openCreateForm = () => {
+    setForm({ name: genDefaultName(), count: 50, notes: '' })
+    setShowCreate(true)
+  }
+
   // 定时刷新任务列表
   useEffect(() => {
     fetchTasks()
@@ -67,14 +76,12 @@ function TasksPage() {
   }, [selectedTaskId, fetchTaskLogs])
 
   const handleCreate = useCallback(async () => {
-    if (!form.name.trim()) {
-      toast.error('请填写任务名称')
-      return
-    }
+    // 名称为空时自动生成
+    const finalName = form.name.trim() || genDefaultName()
     setCreating(true)
     try {
       await createTask({
-        name: form.name.trim(),
+        name: finalName,
         count: form.count,
         notes: form.notes,
       })
@@ -142,7 +149,7 @@ function TasksPage() {
             />
             刷新
           </Button>
-          <Button size='sm' onClick={() => setShowCreate((v) => !v)}>
+          <Button size='sm' onClick={() => (showCreate ? setShowCreate(false) : openCreateForm())}>
             <Plus size={16} />
             新建任务
           </Button>
@@ -165,15 +172,34 @@ function TasksPage() {
           <CardContent className='space-y-4'>
             <div className='grid gap-4 md:grid-cols-3'>
               <div className='space-y-2'>
-                <Label htmlFor='task-name'>任务名称</Label>
-                <Input
-                  id='task-name'
-                  placeholder='例如: batch-01'
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm({ ...form, name: e.target.value })
-                  }
-                />
+                <Label htmlFor='task-name' className='flex items-center gap-2'>
+                  任务名称
+                  <span className='text-muted-foreground text-xs font-normal'>
+                    （留空自动生成）
+                  </span>
+                </Label>
+                <div className='flex gap-1.5'>
+                  <Input
+                    id='task-name'
+                    placeholder='grok-task-xxx'
+                    value={form.name}
+                    onChange={(e) =>
+                      setForm({ ...form, name: e.target.value })
+                    }
+                  />
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='icon'
+                    className='shrink-0'
+                    onClick={() =>
+                      setForm({ ...form, name: genDefaultName() })
+                    }
+                    title='重新生成'
+                  >
+                    <RefreshCw size={14} />
+                  </Button>
+                </div>
               </div>
               <div className='space-y-2'>
                 <Label htmlFor='task-count'>执行次数</Label>
