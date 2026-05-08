@@ -35,7 +35,7 @@ const EMPTY_SETTINGS: SystemSettings = {
 }
 
 function SettingsPage() {
-  const { settings, loadingSettings, fetchSettings, saveSettings } =
+  const { settings, defaults, loadingSettings, fetchSettings, saveSettings } =
     useGrokStore()
   const [form, setForm] = useState<SystemSettings>(EMPTY_SETTINGS)
   const [saving, setSaving] = useState(false)
@@ -45,10 +45,41 @@ function SettingsPage() {
   }, [fetchSettings])
 
   useEffect(() => {
-    if (settings) {
-      setForm({ ...EMPTY_SETTINGS, ...settings })
-    }
-  }, [settings])
+    // 将后端 defaults（config.json + .env 里的默认值）与用户保存的 settings 合并：
+    //   1. EMPTY_SETTINGS 保证每个字段都有值（防止 undefined 触发 React 警告）
+    //   2. defaults 是后端的初始配置，用户没保存过时显示它
+    //   3. settings 是用户保存后存在 DB 里的最终值，优先级最高
+    const defaultsNormalized: Partial<SystemSettings> = (() => {
+      const d = defaults as Record<string, unknown>
+      const api = (d?.api as Record<string, unknown>) || {}
+      return {
+        proxy: typeof d?.proxy === 'string' ? d.proxy : '',
+        browser_proxy:
+          typeof d?.browser_proxy === 'string' ? d.browser_proxy : '',
+        temp_mail_api_base:
+          typeof d?.temp_mail_api_base === 'string' ? d.temp_mail_api_base : '',
+        temp_mail_admin_password:
+          typeof d?.temp_mail_admin_password === 'string'
+            ? d.temp_mail_admin_password
+            : '',
+        temp_mail_domain:
+          typeof d?.temp_mail_domain === 'string' ? d.temp_mail_domain : '',
+        temp_mail_site_password:
+          typeof d?.temp_mail_site_password === 'string'
+            ? d.temp_mail_site_password
+            : '',
+        api_endpoint: typeof api?.endpoint === 'string' ? api.endpoint : '',
+        api_token: typeof api?.token === 'string' ? api.token : '',
+        api_append: typeof api?.append === 'boolean' ? api.append : true,
+      }
+    })()
+
+    setForm({
+      ...EMPTY_SETTINGS,
+      ...defaultsNormalized,
+      ...(settings || {}),
+    })
+  }, [settings, defaults])
 
   const handleSave = async () => {
     setSaving(true)
