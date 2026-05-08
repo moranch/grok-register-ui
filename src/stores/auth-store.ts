@@ -54,25 +54,6 @@ export const useAuthStore = create<AuthState>()((set) => {
         window.localStorage.removeItem('user')
       }
     }
-
-    // ⚠️ 开发阶段：注入一个默认管理员用户，绕过登录
-    // TODO: 接入后端后删除此逻辑
-    if (typeof window !== 'undefined' && import.meta.env.DEV) {
-      const devUser: AuthUser = {
-        id: 1,
-        username: 'admin',
-        display_name: 'Admin (Dev)',
-        role: 100,
-        status: 1,
-        group: 'default',
-      }
-      try {
-        window.localStorage.setItem('user', JSON.stringify(devUser))
-      } catch {
-        /* empty */
-      }
-      return devUser
-    }
     return null
   })()
 

@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 
 interface SignOutDialogProps {
@@ -10,21 +9,18 @@ interface SignOutDialogProps {
 
 export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
   const { t } = useTranslation()
-  const { auth } = useAuthStore()
 
-  const handleSignOut = async () => {
-    auth.reset()
+  const handleSignOut = () => {
     try {
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem('uid')
-      }
+      localStorage.removeItem('console_password')
+      localStorage.removeItem('user')
     } catch {
       /* empty */
     }
-    toast.success(t('Signed out'))
-    // Refresh the page to clear all state and update UI
+    toast.success(t('已登出'))
+    // 回到登录页（整页刷新清除所有内存状态）
     if (typeof window !== 'undefined') {
-      window.location.reload()
+      window.location.href = '/sign-in'
     }
   }
 
@@ -32,11 +28,9 @@ export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={t('Sign out')}
-      desc={t(
-        'Are you sure you want to sign out? You will need to sign in again to access your account.'
-      )}
-      confirmText={t('Sign out')}
+      title={t('登出控制台')}
+      desc={t('确定要登出吗？登出后需要重新输入密码才能访问。')}
+      confirmText={t('登出')}
       handleConfirm={handleSignOut}
       className='sm:max-w-sm'
     />
