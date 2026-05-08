@@ -10,6 +10,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { useGrokStore } from '@/stores/grok-store'
+import { formatBackendTime } from '@/lib/grok-time'
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
@@ -183,9 +184,7 @@ function DashboardPage() {
             <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
               <Clock size={14} />
               <span>
-                {healthCheckedAt
-                  ? new Date(healthCheckedAt).toLocaleString()
-                  : '-'}
+                {formatBackendTime(healthCheckedAt)}
               </span>
             </div>
           </CardHeader>
@@ -267,9 +266,7 @@ function DashboardPage() {
                       {task.current_phase || '-'}
                     </TableCell>
                     <TableCell className='text-muted-foreground text-sm'>
-                      {task.created_at
-                        ? new Date(task.created_at).toLocaleString()
-                        : '-'}
+                      {formatBackendTime(task.created_at)}
                     </TableCell>
                   </TableRow>
                 ))}

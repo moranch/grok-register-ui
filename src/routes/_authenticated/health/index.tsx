@@ -12,6 +12,7 @@ import {
   Shield,
 } from 'lucide-react'
 import { useGrokStore } from '@/stores/grok-store'
+import { formatBackendTime } from '@/lib/grok-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -61,10 +62,7 @@ function HealthPage() {
       {/* 检测时间 */}
       <div className='text-muted-foreground flex items-center gap-2 text-sm'>
         <Clock size={16} />
-        <span>
-          检测时间:{' '}
-          {healthCheckedAt ? new Date(healthCheckedAt).toLocaleString() : '-'}
-        </span>
+        <span>检测时间: {formatBackendTime(healthCheckedAt)}</span>
       </div>
 
       {/* 检查项卡片 */}

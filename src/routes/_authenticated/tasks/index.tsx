@@ -51,8 +51,19 @@ function TasksPage() {
   const [form, setForm] = useState({ name: '', count: 50, notes: '' })
   const [creating, setCreating] = useState(false)
 
-  // 生成默认任务名：grok-task-<13位时间戳>
-  const genDefaultName = () => `grok-task-${Date.now()}`
+  // 生成默认任务名：grok-task-<YYYYMMDDHHmmss>（本地时间，更易读）
+  const genDefaultName = () => {
+    const d = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const stamp =
+      d.getFullYear().toString() +
+      pad(d.getMonth() + 1) +
+      pad(d.getDate()) +
+      pad(d.getHours()) +
+      pad(d.getMinutes()) +
+      pad(d.getSeconds())
+    return `grok-task-${stamp}`
+  }
 
   // 打开新建表单时自动填一个默认任务名
   const openCreateForm = () => {
