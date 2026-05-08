@@ -22,6 +22,13 @@ grokApi.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('console_password')
+      // 当前不在 /sign-in 页时自动跳转登录（避免登录页自己 401 时循环跳）
+      if (
+        typeof window !== 'undefined' &&
+        !window.location.pathname.startsWith('/sign-in')
+      ) {
+        window.location.href = '/sign-in'
+      }
     }
     return Promise.reject(error)
   }
