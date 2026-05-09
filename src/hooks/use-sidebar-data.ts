@@ -49,7 +49,7 @@ export function useSidebarData(): SidebarData {
             icon: ListTodo,
           },
           {
-            title: t('账号'),
+            title: t('账户资产'),
             url: '/accounts',
             icon: Users,
           },
