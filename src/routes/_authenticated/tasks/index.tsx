@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import {
   Plus,
@@ -13,10 +13,14 @@ import {
   XCircle,
   RefreshCw,
   ListTodo,
-  Bug,
+  Cpu,
+  EyeOff,
+  Eye,
+  Zap,
+  ExternalLink,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Task } from '@/lib/grok-api'
+import { taskApi, type Task } from '@/lib/grok-api'
 import { useGrokStore } from '@/stores/grok-store'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -32,9 +36,42 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { Switch } from '@/components/ui/switch'
 
 const RUNNING_STATES = ['queued', 'running', 'stopping']
+
+type ExecutorKey = 'default' | 'headless' | 'headed' | 'protocol'
+
+const EXECUTOR_OPTIONS: {
+  key: ExecutorKey
+  icon: typeof Cpu
+  title: string
+  desc: string
+}[] = [
+  {
+    key: 'default',
+    icon: Cpu,
+    title: '跟随系统',
+    desc: '使用系统配置里的默认执行器',
+  },
+  {
+    key: 'headless',
+    icon: EyeOff,
+    title: '无头',
+    desc: '--headless=new',
+  },
+  {
+    key: 'headed',
+    icon: Eye,
+    title: '有头（调试）',
+    desc: 'Xvfb + noVNC 可观察',
+  },
+  {
+    key: 'protocol',
+    icon: Zap,
+    title: '纯协议（实验）',
+    desc: '无浏览器',
+  },
+]
 
 function TasksPage() {
   const {
@@ -54,14 +91,12 @@ function TasksPage() {
     name: string
     count: number
     notes: string
-    debug_mode: boolean
-    debug_override: boolean
+    executor: ExecutorKey
   }>({
     name: '',
     count: 50,
     notes: '',
-    debug_mode: false,
-    debug_override: false,
+    executor: 'default',
   })
   const [creating, setCreating] = useState(false)
 
@@ -85,8 +120,7 @@ function TasksPage() {
       name: genDefaultName(),
       count: 50,
       notes: '',
-      debug_mode: false,
-      debug_override: false,
+      executor: 'default',
     })
     setShowCreate(true)
   }
@@ -98,12 +132,51 @@ function TasksPage() {
     return () => clearInterval(timer)
   }, [fetchTasks])
 
-  // 选中任务时每 3 秒刷新日志
+  // SSE 实时日志：保存在本地 state 里（不走 store，避免 SSE 重连闪烁）
+  const [sseLogs, setSseLogs] = useState<string[]>([])
+  const sseRef = useRef<EventSource | null>(null)
   useEffect(() => {
+    // 关掉旧的连接
+    if (sseRef.current) {
+      sseRef.current.close()
+      sseRef.current = null
+    }
+    setSseLogs([])
     if (!selectedTaskId) return
-    fetchTaskLogs(selectedTaskId)
-    const timer = setInterval(() => fetchTaskLogs(selectedTaskId), 3000)
-    return () => clearInterval(timer)
+    try {
+      const es = new EventSource(taskApi.streamUrl(selectedTaskId))
+      sseRef.current = es
+      es.onmessage = (ev) => {
+        try {
+          const data = JSON.parse(ev.data) as { line: string }
+          setSseLogs((prev) => {
+            // 保留最多 2000 行，避免内存爆炸
+            const next =
+              prev.length > 2000 ? prev.slice(-1800) : prev.slice()
+            next.push(data.line)
+            return next
+          })
+        } catch {
+          /* ignore */
+        }
+      }
+      es.addEventListener('done', () => {
+        es.close()
+      })
+      es.onerror = () => {
+        // 5 秒后回落到一次性拉取（fetchTaskLogs）作为兜底
+        setTimeout(() => fetchTaskLogs(selectedTaskId), 5000)
+      }
+    } catch {
+      // EventSource 创建失败，回落老的 3 秒轮询
+      fetchTaskLogs(selectedTaskId)
+      const timer = setInterval(() => fetchTaskLogs(selectedTaskId), 3000)
+      return () => clearInterval(timer)
+    }
+    return () => {
+      sseRef.current?.close()
+      sseRef.current = null
+    }
   }, [selectedTaskId, fetchTaskLogs])
 
   const handleCreate = useCallback(async () => {
@@ -115,9 +188,8 @@ function TasksPage() {
         name: finalName,
         count: form.count,
         notes: form.notes,
-        // 只在用户显式勾选"覆盖系统默认"时，才把 debug_mode 传给后端
-        // 否则后端会沿用系统配置页里的全局设置
-        ...(form.debug_override ? { debug_mode: form.debug_mode } : {}),
+        // executor === 'default' 就不传给后端，让后端用系统默认
+        ...(form.executor !== 'default' ? { executor: form.executor } : {}),
       })
       toast.success('任务创建成功')
       setShowCreate(false)
@@ -125,8 +197,7 @@ function TasksPage() {
         name: '',
         count: 50,
         notes: '',
-        debug_mode: false,
-        debug_override: false,
+        executor: 'default',
       })
     } catch {
       toast.error('任务创建失败')
@@ -161,7 +232,11 @@ function TasksPage() {
     () => tasks.find((t) => t.id === selectedTaskId) || null,
     [tasks, selectedTaskId]
   )
-  const logs = selectedTaskId ? taskLogs[selectedTaskId] || [] : []
+  // 优先用 SSE 实时日志，SSE 断开时回落到 taskLogs 里的轮询结果
+  const logs = useMemo(() => {
+    if (sseLogs.length > 0) return sseLogs
+    return selectedTaskId ? taskLogs[selectedTaskId] || [] : []
+  }, [sseLogs, selectedTaskId, taskLogs])
 
   return (
     <div className='space-y-6 p-6'>
@@ -270,52 +345,49 @@ function TasksPage() {
               </div>
             </div>
 
-            {/* 调试模式单任务覆盖 */}
-            <div
-              className={cn(
-                'flex items-start justify-between gap-4 rounded-lg border p-3 transition-colors',
-                form.debug_override
-                  ? 'border-amber-400/60 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-900/10'
-                  : 'bg-muted/30'
-              )}
-            >
-              <div className='space-y-1.5'>
-                <div className='flex items-center gap-2'>
-                  <Bug size={14} className='text-muted-foreground' />
-                  <span className='text-sm font-medium'>
-                    覆盖系统默认的调试模式
-                  </span>
-                </div>
-                <p className='text-muted-foreground text-xs leading-relaxed'>
-                  默认跟随系统配置页里的设置。勾选后可针对本任务单独切换：
-                  {form.debug_override
-                    ? form.debug_mode
-                      ? '浏览器"有头"运行（Xvfb）'
-                      : '浏览器完全无头运行'
-                    : '使用系统默认'}
-                </p>
+            {/* 执行器选择（单任务覆盖） */}
+            <div className='space-y-2'>
+              <div className='flex items-center gap-2'>
+                <Cpu size={14} className='text-muted-foreground' />
+                <span className='text-sm font-medium'>执行器</span>
+                <span className='text-muted-foreground text-xs font-normal'>
+                  （可针对本任务单独选择，留空跟随系统）
+                </span>
               </div>
-              <div className='flex items-center gap-3'>
-                <Switch
-                  checked={form.debug_override}
-                  onCheckedChange={(v: boolean) =>
-                    setForm({ ...form, debug_override: v })
-                  }
-                />
-                {form.debug_override && (
-                  <div className='flex items-center gap-1.5 rounded-md border px-2 py-1'>
-                    <span className='text-muted-foreground text-[11px]'>
-                      调试
-                    </span>
-                    <Switch
-                      size='sm'
-                      checked={form.debug_mode}
-                      onCheckedChange={(v: boolean) =>
-                        setForm({ ...form, debug_mode: v })
-                      }
-                    />
-                  </div>
-                )}
+              <div className='grid gap-2 md:grid-cols-4'>
+                {EXECUTOR_OPTIONS.map((opt) => {
+                  const selected = form.executor === opt.key
+                  const Icon = opt.icon
+                  return (
+                    <label
+                      key={opt.key}
+                      className={cn(
+                        'cursor-pointer space-y-1 rounded-lg border p-2.5 text-xs transition-all',
+                        selected
+                          ? 'border-primary bg-primary/5 shadow-sm'
+                          : 'hover:border-primary/40 hover:bg-muted/40'
+                      )}
+                    >
+                      <input
+                        type='radio'
+                        name='task-executor'
+                        className='sr-only'
+                        value={opt.key}
+                        checked={selected}
+                        onChange={() =>
+                          setForm({ ...form, executor: opt.key })
+                        }
+                      />
+                      <div className='flex items-center gap-1.5'>
+                        <Icon size={12} className='text-primary' />
+                        <span className='font-semibold'>{opt.title}</span>
+                      </div>
+                      <div className='text-muted-foreground text-[10px]'>
+                        {opt.desc}
+                      </div>
+                    </label>
+                  )
+                })}
               </div>
             </div>
 
@@ -485,6 +557,19 @@ function TaskDetail({
   onRefreshLogs: () => void
 }) {
   const isRunning = RUNNING_STATES.includes(task.status)
+  const [autoScroll, setAutoScroll] = useState(true)
+  const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const logEndRef = useRef<HTMLDivElement>(null)
+
+  // 自动滚动到日志底部
+  useEffect(() => {
+    if (!autoScroll) return
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [logs.length, autoScroll])
+
+  // headed 执行器时，顶部提示"可以到 noVNC 看浏览器"
+  const executor = task.config?.executor || 'headless'
+  const isHeaded = executor === 'headed' || !!task.config?.debug_mode
 
   return (
     <Card>
@@ -494,6 +579,31 @@ function TaskDetail({
         </CardTitle>
       </CardHeader>
       <CardContent className='space-y-4'>
+        {/* 有头执行器时：提示可用 noVNC 实时观察 */}
+        {isHeaded && isRunning && (
+          <div className='flex items-center justify-between rounded-lg border border-violet-300 bg-violet-50 p-3 dark:border-violet-500/40 dark:bg-violet-900/10'>
+            <div className='flex items-start gap-2'>
+              <Eye className='mt-0.5 size-4 text-violet-600 dark:text-violet-400' />
+              <div className='text-sm'>
+                <div className='font-medium text-violet-700 dark:text-violet-300'>
+                  这是"有头执行器"任务
+                </div>
+                <p className='text-muted-foreground mt-0.5 text-xs'>
+                  可以到"可视化调试（noVNC）"页实时看到浏览器窗口
+                </p>
+              </div>
+            </div>
+            <Button
+              size='sm'
+              variant='outline'
+              onClick={() => window.open('/novnc', '_blank')}
+            >
+              <ExternalLink size={14} />
+              打开 noVNC
+            </Button>
+          </div>
+        )}
+
         {/* 停止按钮 - 单独一行放在状态卡片上方 */}
         {isRunning && (
           <div className='rounded-lg border border-red-200 bg-red-50 p-2 dark:border-red-900/40 dark:bg-red-900/10'>
@@ -589,13 +699,30 @@ function TaskDetail({
               <span className='text-muted-foreground text-xs'>
                 {logs.length} 行
               </span>
+              <span className='flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400'>
+                <span className='size-1.5 animate-pulse rounded-full bg-emerald-500' />
+                SSE
+              </span>
             </div>
-            <Button variant='outline' size='sm' onClick={onRefreshLogs}>
-              <RefreshCw size={14} />
-              刷新日志
-            </Button>
+            <div className='flex items-center gap-2'>
+              <label className='flex items-center gap-1.5 text-xs'>
+                <input
+                  type='checkbox'
+                  checked={autoScroll}
+                  onChange={(e) => setAutoScroll(e.target.checked)}
+                />
+                <span className='text-muted-foreground'>自动滚动</span>
+              </label>
+              <Button variant='outline' size='sm' onClick={onRefreshLogs}>
+                <RefreshCw size={14} />
+                刷新日志
+              </Button>
+            </div>
           </div>
-          <ScrollArea className='h-[500px] rounded-lg bg-[#1a1a2e]'>
+          <ScrollArea
+            ref={scrollAreaRef}
+            className='h-[500px] rounded-lg bg-[#1a1a2e]'
+          >
             <div className='p-4 font-mono text-xs leading-relaxed text-[#a0a0b0]'>
               {logs.length === 0 ? (
                 <div className='py-10 text-center text-[#6a6a7a]'>
@@ -614,6 +741,7 @@ function TaskDetail({
                   </div>
                 ))
               )}
+              <div ref={logEndRef} />
             </div>
           </ScrollArea>
         </div>

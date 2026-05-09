@@ -7,11 +7,16 @@ import {
   Globe,
   Mail,
   Key,
-  Bug,
+  Cpu,
+  Clock,
+  Zap,
+  EyeOff,
+  Eye,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useGrokStore } from '@/stores/grok-store'
 import type { SystemSettings } from '@/lib/grok-api'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -35,7 +40,47 @@ const EMPTY_SETTINGS: SystemSettings = {
   api_token: '',
   api_append: true,
   debug_mode: false,
+  executor: 'headless',
+  lifecycle_enabled: false,
+  lifecycle_check_hours: 6,
 }
+
+type ExecutorKey = 'headless' | 'headed' | 'protocol'
+
+const EXECUTOR_OPTIONS: {
+  key: ExecutorKey
+  icon: typeof Zap
+  title: string
+  desc: string
+  hint: string
+  accent: string
+}[] = [
+  {
+    key: 'headless',
+    icon: EyeOff,
+    title: '无头浏览器',
+    desc: '生产默认：--headless=new，资源最省',
+    hint: '推荐生产使用',
+    accent: 'border-sky-500/60 bg-sky-50 dark:border-sky-500/30 dark:bg-sky-900/10',
+  },
+  {
+    key: 'headed',
+    icon: Eye,
+    title: '有头浏览器',
+    desc: '通过 Xvfb + noVNC 可观察浏览器，反检测更佳',
+    hint: '调试 / 反爬拦截排查',
+    accent: 'border-amber-400/60 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-900/10',
+  },
+  {
+    key: 'protocol',
+    icon: Zap,
+    title: '纯协议（实验）',
+    desc: '直接 HTTP 请求，无浏览器。需要配置 Turnstile 远程 solver',
+    hint: '当前为占位，按需后续接入',
+    accent:
+      'border-violet-400/60 bg-violet-50 dark:border-violet-500/30 dark:bg-violet-900/10',
+  },
+]
 
 function SettingsPage() {
   const { settings, defaults, loadingSettings, fetchSettings, saveSettings } =
@@ -48,10 +93,6 @@ function SettingsPage() {
   }, [fetchSettings])
 
   useEffect(() => {
-    // 将后端 defaults（config.json + .env 里的默认值）与用户保存的 settings 合并：
-    //   1. EMPTY_SETTINGS 保证每个字段都有值（防止 undefined 触发 React 警告）
-    //   2. defaults 是后端的初始配置，用户没保存过时显示它
-    //   3. settings 是用户保存后存在 DB 里的最终值，优先级最高
     const defaultsNormalized: Partial<SystemSettings> = (() => {
       const d = defaults as Record<string, unknown>
       const api = (d?.api as Record<string, unknown>) || {}
@@ -75,6 +116,13 @@ function SettingsPage() {
         api_token: typeof api?.token === 'string' ? api.token : '',
         api_append: typeof api?.append === 'boolean' ? api.append : true,
         debug_mode: typeof d?.debug_mode === 'boolean' ? d.debug_mode : false,
+        executor: typeof d?.executor === 'string' ? d.executor : 'headless',
+        lifecycle_enabled:
+          typeof d?.lifecycle_enabled === 'boolean' ? d.lifecycle_enabled : false,
+        lifecycle_check_hours:
+          typeof d?.lifecycle_check_hours === 'number'
+            ? d.lifecycle_check_hours
+            : 6,
       }
     })()
 
@@ -111,7 +159,7 @@ function SettingsPage() {
           <div>
             <h1 className='text-2xl font-bold'>系统配置</h1>
             <p className='text-muted-foreground mt-0.5 text-sm'>
-              配置代理、临时邮箱和 Token 推送接口
+              配置代理、临时邮箱、Token 推送、执行器与账号生命周期
             </p>
           </div>
         </div>
@@ -135,9 +183,8 @@ function SettingsPage() {
         </div>
       </div>
 
-      {/* 2 列网格 + 1 跨列卡片（对齐原备份布局） */}
       <div className='grid gap-4 lg:grid-cols-2'>
-        {/* 左上：代理配置 */}
+        {/* 代理 */}
         <Card>
           <CardHeader>
             <CardTitle className='flex items-center gap-2.5 text-base'>
@@ -155,7 +202,7 @@ function SettingsPage() {
                 onChange={(e) => update('browser_proxy', e.target.value)}
               />
               <p className='text-muted-foreground text-xs'>
-                浏览器访问 x.ai 时走的代理
+                浏览器访问 x.ai 时走的代理；如果代理池有启用项，会被代理池挑选结果覆盖
               </p>
             </div>
             <div className='space-y-2'>
@@ -173,7 +220,7 @@ function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* 右上：临时邮箱配置 */}
+        {/* 临时邮箱 */}
         <Card>
           <CardHeader>
             <CardTitle className='flex items-center gap-2.5 text-base'>
@@ -227,7 +274,7 @@ function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* 下方跨两列：Token 推送 */}
+        {/* Token 推送（跨两列） */}
         <Card className='lg:col-span-2'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2.5 text-base'>
@@ -258,11 +305,12 @@ function SettingsPage() {
             </div>
             <label
               htmlFor='api_append'
-              className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+              className={cn(
+                'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors',
                 form.api_append
                   ? 'border-primary bg-primary/5'
                   : 'bg-muted/30'
-              }`}
+              )}
             >
               <Checkbox
                 id='api_append'
@@ -280,46 +328,131 @@ function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* 调试模式开关（跨两列） */}
+        {/* 执行器（跨两列） */}
         <Card className='lg:col-span-2'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2.5 text-base'>
-              <Bug className='text-primary size-5' />
-              运行模式
+              <Cpu className='text-primary size-5' />
+              执行器 / 运行模式
             </CardTitle>
           </CardHeader>
           <CardContent>
+            <div className='grid gap-3 md:grid-cols-3'>
+              {EXECUTOR_OPTIONS.map((opt) => {
+                const selected = form.executor === opt.key
+                const Icon = opt.icon
+                return (
+                  <label
+                    key={opt.key}
+                    className={cn(
+                      'cursor-pointer space-y-2 rounded-lg border p-4 transition-all',
+                      selected
+                        ? opt.accent + ' shadow-sm'
+                        : 'hover:border-primary/40 hover:bg-muted/40'
+                    )}
+                  >
+                    <input
+                      type='radio'
+                      name='executor'
+                      className='sr-only'
+                      value={opt.key}
+                      checked={selected}
+                      onChange={() => {
+                        update('executor', opt.key)
+                        // headed 会隐式开启调试模式，headless/protocol 关闭
+                        update('debug_mode', opt.key === 'headed')
+                      }}
+                    />
+                    <div className='flex items-center justify-between'>
+                      <div className='flex items-center gap-2'>
+                        <Icon className='text-primary size-4' />
+                        <span className='text-sm font-semibold'>
+                          {opt.title}
+                        </span>
+                      </div>
+                      {selected && (
+                        <span className='bg-primary/20 text-primary rounded px-1.5 py-0.5 text-[10px] font-medium'>
+                          已选
+                        </span>
+                      )}
+                    </div>
+                    <p className='text-muted-foreground text-xs leading-relaxed'>
+                      {opt.desc}
+                    </p>
+                    <div className='text-muted-foreground text-[10px]'>
+                      {opt.hint}
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+            <p className='text-muted-foreground mt-4 text-xs'>
+              💡 选择"有头浏览器"后，启动任务时可以在侧边栏的
+              <span className='font-medium'>可视化调试（noVNC）</span>
+              页实时看到浏览器窗口。
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* 生命周期（跨两列） */}
+        <Card className='lg:col-span-2'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2.5 text-base'>
+              <Clock className='text-primary size-5' />
+              账号生命周期
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-4'>
             <div
-              className={`flex items-start justify-between gap-4 rounded-lg border p-4 transition-colors ${
-                form.debug_mode
-                  ? 'border-amber-400/60 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-900/10'
+              className={cn(
+                'flex items-start justify-between gap-4 rounded-lg border p-4 transition-colors',
+                form.lifecycle_enabled
+                  ? 'border-emerald-400/60 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-900/10'
                   : 'bg-muted/30'
-              }`}
+              )}
             >
               <div className='space-y-1.5'>
                 <div className='flex items-center gap-2'>
-                  <span className='text-sm font-semibold'>调试模式</span>
-                  {form.debug_mode ? (
-                    <span className='rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300'>
-                      已开启
-                    </span>
-                  ) : (
-                    <span className='text-muted-foreground rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium'>
-                      生产模式
+                  <span className='text-sm font-semibold'>
+                    定时检测账号 / Token 有效性
+                  </span>
+                  {form.lifecycle_enabled && (
+                    <span className='rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300'>
+                      已启用
                     </span>
                   )}
                 </div>
                 <p className='text-muted-foreground text-xs leading-relaxed'>
-                  关闭（默认）：浏览器以 <code>--headless=new</code> 完全无头运行，占用最低，推荐生产使用。
-                  <br />
-                  开启：启用 Xvfb 虚拟显示器，浏览器以"有头"方式运行，便于排查反爬拦截或 Turnstile
-                  异常；资源开销更大，仅在调试时开启。
+                  开启后，系统会按下方间隔周期性调用"Token 推送接口"做可达性检测。
+                  失败时可以在"统计分析"页看到错误聚合。
                 </p>
               </div>
               <Switch
-                checked={form.debug_mode}
-                onCheckedChange={(v: boolean) => update('debug_mode', v)}
+                checked={form.lifecycle_enabled}
+                onCheckedChange={(v: boolean) => update('lifecycle_enabled', v)}
               />
+            </div>
+            <div className='flex items-center gap-3'>
+              <Label htmlFor='lifecycle-hours' className='shrink-0 text-sm'>
+                检测间隔（小时）
+              </Label>
+              <Input
+                id='lifecycle-hours'
+                type='number'
+                min={1}
+                max={168}
+                className='max-w-[120px]'
+                value={form.lifecycle_check_hours}
+                onChange={(e) =>
+                  update(
+                    'lifecycle_check_hours',
+                    Math.max(1, Math.min(168, parseInt(e.target.value) || 6))
+                  )
+                }
+              />
+              <span className='text-muted-foreground text-xs'>
+                推荐 6 小时；最小 1 小时，最大 168 小时
+              </span>
             </div>
           </CardContent>
         </Card>

@@ -3,6 +3,10 @@ import {
   ListTodo,
   HeartPulse,
   Settings,
+  Network,
+  Users,
+  BarChart3,
+  Monitor,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { GrokLogo } from '@/components/grok-logo'
@@ -37,9 +41,35 @@ export function useSidebarData(): SidebarData {
             icon: ListTodo,
           },
           {
+            title: t('账号管理'),
+            url: '/accounts',
+            icon: Users,
+          },
+          {
+            title: t('统计分析'),
+            url: '/stats',
+            icon: BarChart3,
+          },
+        ],
+      },
+      {
+        id: 'ops',
+        title: t('运维'),
+        items: [
+          {
+            title: t('代理池'),
+            url: '/proxies',
+            icon: Network,
+          },
+          {
             title: t('健康检查'),
             url: '/health',
             icon: HeartPulse,
+          },
+          {
+            title: t('可视化调试'),
+            url: '/novnc',
+            icon: Monitor,
           },
           {
             title: t('系统配置'),

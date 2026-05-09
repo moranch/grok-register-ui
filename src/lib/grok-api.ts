@@ -22,7 +22,6 @@ grokApi.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('console_password')
-      // 当前不在 /sign-in 页时自动跳转登录（避免登录页自己 401 时循环跳）
       if (
         typeof window !== 'undefined' &&
         !window.location.pathname.startsWith('/sign-in')
@@ -72,6 +71,8 @@ export interface TaskConfig {
   }
   /** 调试模式：true=浏览器"有头"运行（Xvfb），false=无头 */
   debug_mode?: boolean
+  /** 执行器：headless / headed / protocol */
+  executor?: string
 }
 
 export interface HealthItem {
@@ -94,8 +95,74 @@ export interface SystemSettings {
   api_endpoint: string
   api_token: string
   api_append: boolean
-  /** 调试模式：默认 false（无头）；开启后浏览器以"有头"方式运行（需要 Xvfb） */
+  /** 调试模式：默认 false（无头） */
   debug_mode: boolean
+  /** 执行器：headless(默认) / headed / protocol */
+  executor: string
+  /** 账号生命周期自动续期开关 */
+  lifecycle_enabled: boolean
+  /** 有效性检测间隔，单位小时 */
+  lifecycle_check_hours: number
+}
+
+// ---- 代理池 ----
+export interface ProxyEntry {
+  id: number
+  url: string
+  label: string
+  enabled: boolean
+  success_count: number
+  failure_count: number
+  consecutive_failures: number
+  success_rate: number
+  last_used_at: string
+  created_at: string
+}
+
+// ---- 账号 ----
+export interface AccountEntry {
+  id: number
+  email: string
+  sso: string
+  task_id: number | null
+  proxy_url: string
+  status: string
+  last_checked_at: string
+  created_at: string
+}
+
+// ---- 统计 ----
+export interface StatsOverview {
+  total_events: number
+  success_count: number
+  failure_count: number
+  success_rate: number
+  account_count: number
+  trend: { day: string; ok: number; fail: number }[]
+}
+
+export interface StatsErrorItem {
+  kind: string
+  count: number
+  sample: string
+}
+
+export interface StatsByProxyItem {
+  proxy_url: string
+  ok: number
+  fail: number
+  total: number
+  success_rate: number
+}
+
+// ---- 生命周期 ----
+export interface LifecycleStatus {
+  enabled: boolean
+  check_hours: number
+  last_check_at: string
+  last_refresh_at: string
+  last_result: string
+  running: boolean
 }
 
 // ==================== API ====================
@@ -112,6 +179,8 @@ export const taskApi = {
     grokApi.get<{ lines: string[] }>(`/tasks/${id}/logs`, {
       params: { limit },
     }),
+  /** SSE 实时日志 URL（EventSource 直接用） */
+  streamUrl: (id: number) => `/api/tasks/${id}/stream`,
 }
 
 export const settingsApi = {
@@ -127,6 +196,46 @@ export const settingsApi = {
 export const healthApi = {
   check: () =>
     grokApi.get<{ items: HealthItem[]; checked_at: string }>('/health'),
+}
+
+export const proxyApi = {
+  list: () => grokApi.get<{ proxies: ProxyEntry[] }>('/proxies'),
+  add: (data: { url: string; label?: string; enabled?: boolean }) =>
+    grokApi.post<{ proxy: ProxyEntry }>('/proxies', data),
+  update: (
+    id: number,
+    data: { label?: string; enabled?: boolean; reset_stats?: boolean }
+  ) => grokApi.patch<{ proxy: ProxyEntry }>(`/proxies/${id}`, data),
+  delete: (id: number) => grokApi.delete(`/proxies/${id}`),
+}
+
+export const accountApi = {
+  list: (limit = 500) =>
+    grokApi.get<{ items: AccountEntry[] }>('/accounts', { params: { limit } }),
+  exportUrl: (fmt: 'json' | 'csv' | 'sso') =>
+    `/api/accounts/export?fmt=${fmt}`,
+}
+
+export const statsApi = {
+  overview: (days = 7) =>
+    grokApi.get<StatsOverview>('/stats/overview', { params: { days } }),
+  errors: (days = 7) =>
+    grokApi.get<{ items: StatsErrorItem[] }>('/stats/errors', {
+      params: { days },
+    }),
+  byProxy: () =>
+    grokApi.get<{ items: StatsByProxyItem[] }>('/stats/by-proxy'),
+}
+
+export const lifecycleApi = {
+  status: () => grokApi.get<LifecycleStatus>('/lifecycle/status'),
+  check: () =>
+    grokApi.post<{
+      ok: boolean
+      message: string
+      endpoint?: string
+      checked_at: string
+    }>('/lifecycle/check'),
 }
 
 export const metaApi = {
