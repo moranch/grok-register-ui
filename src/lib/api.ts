@@ -565,6 +565,17 @@ export const platformApi = {
     )
     return res.data
   },
+  /** 启用/禁用平台 */
+  setEnabled: async (
+    name: string,
+    enabled: boolean
+  ): Promise<{ ok: boolean; platform: string; enabled: boolean }> => {
+    const res = await grokApi.patch(
+      `/platforms/${encodeURIComponent(name)}/enabled`,
+      { enabled }
+    )
+    return res.data
+  },
   testRun: async (
     name: string,
     params: Record<string, unknown> = {}

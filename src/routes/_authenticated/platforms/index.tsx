@@ -43,6 +43,16 @@ function PlatformsPage() {
     onError: (e: Error) => toast.error(e.message || '保存失败'),
   })
 
+  const toggleEnabledMutation = useMutation({
+    mutationFn: ({ name, enabled }: { name: string; enabled: boolean }) =>
+      platformApi.setEnabled(name, enabled),
+    onSuccess: (res) => {
+      toast.success(res.enabled ? '平台已启用' : '平台已禁用')
+      queryClient.invalidateQueries({ queryKey: ['platforms'] })
+    },
+    onError: (e: Error) => toast.error(e.message || '切换失败'),
+  })
+
   const testRunMutation = useMutation({
     mutationFn: (name: string) => platformApi.testRun(name, {}),
     onSuccess: (result) => {
@@ -109,7 +119,13 @@ function PlatformsPage() {
                   <CardTitle className='text-base'>{p.display_name}</CardTitle>
                   <span className='text-muted-foreground font-mono text-xs'>{p.name}</span>
                 </div>
-                <Switch checked={p.enabled} disabled />
+                <Switch
+                  checked={p.enabled}
+                  disabled={toggleEnabledMutation.isPending}
+                  onCheckedChange={(v) =>
+                    toggleEnabledMutation.mutate({ name: p.name, enabled: v })
+                  }
+                />
               </CardHeader>
               <CardContent className='space-y-3'>
                 {/* 执行器徽章 */}
