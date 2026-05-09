@@ -402,7 +402,12 @@ export const taskApi = {
     grokApi.get<{ lines: string[] }>(`/tasks/${id}/logs`, {
       params: { limit },
     }),
-  streamUrl: (id: number) => `/api/tasks/${id}/stream`,
+  streamUrl: (id: number) => {
+    const pw = typeof window !== 'undefined'
+      ? window.localStorage.getItem('console_password') || ''
+      : ''
+    return `/api/tasks/${id}/stream${pw ? `?token=${encodeURIComponent(pw)}` : ''}`
+  },
 }
 
 export const settingsApi = {
