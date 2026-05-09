@@ -332,6 +332,13 @@ export const mailboxApi = {
       message?: string
       checked_at: string
     }>(`/mailboxes/${id}/domains`),
+  importDefault: (force = false) =>
+    grokApi.post<{
+      ok: boolean
+      skipped?: boolean
+      message?: string
+      mailbox?: MailboxEntry
+    }>('/mailboxes/import-default', null, { params: { force } }),
 }
 
 export const accountApi = {

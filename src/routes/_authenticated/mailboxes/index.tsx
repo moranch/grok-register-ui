@@ -13,6 +13,7 @@ import {
   EyeOff,
   AlertCircle,
   Globe,
+  Download,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useGrokStore } from '@/stores/grok-store'
@@ -205,6 +206,24 @@ function MailboxesPage() {
     }
   }
 
+  const handleImportDefault = async (force = false) => {
+    try {
+      const { data } = await mailboxApi.importDefault(force)
+      if (data.ok) {
+        if (data.skipped) {
+          toast.info(data.message || '已存在 Provider，跳过导入')
+        } else {
+          toast.success('已从系统默认配置导入一条 Provider')
+        }
+        fetchMailboxes()
+      } else {
+        toast.error(data.message || '导入失败')
+      }
+    } catch {
+      toast.error('导入失败')
+    }
+  }
+
   const total = mailboxes.length
   const enabledCount = mailboxes.filter((m) => m.enabled).length
   const activeId = editingId
@@ -230,6 +249,15 @@ function MailboxesPage() {
           >
             {showSecrets ? <EyeOff size={16} /> : <Eye size={16} />}
             {showSecrets ? '隐藏密钥' : '显示密钥'}
+          </Button>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => handleImportDefault(false)}
+            title='把系统配置里的默认邮箱导入为一条 Provider'
+          >
+            <Download size={16} />
+            导入默认
           </Button>
           <Button
             variant='outline'
@@ -399,6 +427,26 @@ function MailboxesPage() {
                 <div className='text-sm'>
                   暂无邮箱 Provider，新任务会回落到系统配置里的邮箱
                 </div>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='mt-4'
+                  onClick={() => handleImportDefault(false)}
+                >
+                  <Download size={14} />
+                  一键导入系统默认配置
+                </Button>
+                <p className='text-muted-foreground mt-2 text-xs'>
+                  会把{' '}
+                  <code className='bg-muted mx-1 rounded px-1 py-0.5'>
+                    config.json
+                  </code>
+                  里的
+                  <code className='bg-muted mx-1 rounded px-1 py-0.5'>
+                    temp_mail_*
+                  </code>
+                  一键保存成一条 Provider
+                </p>
               </div>
             ) : (
               <div className='space-y-3'>
