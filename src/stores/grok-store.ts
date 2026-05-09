@@ -15,6 +15,10 @@ import {
   type MailboxEntry,
   type MailboxProviderType,
   type AccountEntry,
+  type AccountAssetSummary,
+  type AccountLifecycle,
+  type AccountPlanState,
+  type AccountValidity,
   type StatsOverview,
   type StatsErrorItem,
   type StatsByProxyItem,
@@ -88,6 +92,19 @@ interface GrokState {
   accounts: AccountEntry[]
   loadingAccounts: boolean
   fetchAccounts: (limit?: number) => Promise<void>
+  accountSummary: AccountAssetSummary | null
+  fetchAccountSummary: () => Promise<void>
+  updateAccount: (
+    id: number,
+    data: Partial<{
+      lifecycle_status: AccountLifecycle
+      plan_state: AccountPlanState
+      validity_status: AccountValidity
+      notes: string
+      last_error: string
+    }>
+  ) => Promise<void>
+  deleteAccount: (id: number) => Promise<void>
 
   // Stats
   statsOverview: StatsOverview | null
@@ -239,6 +256,25 @@ export const useGrokStore = create<GrokState>((set, get) => ({
     } finally {
       set({ loadingAccounts: false })
     }
+  },
+  accountSummary: null,
+  fetchAccountSummary: async () => {
+    try {
+      const { data } = await accountApi.summary()
+      set({ accountSummary: data })
+    } catch {
+      /* ignore */
+    }
+  },
+  updateAccount: async (id, data) => {
+    await accountApi.update(id, data)
+    await get().fetchAccounts(1000)
+    await get().fetchAccountSummary()
+  },
+  deleteAccount: async (id) => {
+    await accountApi.delete(id)
+    await get().fetchAccounts(1000)
+    await get().fetchAccountSummary()
   },
 
   // Stats

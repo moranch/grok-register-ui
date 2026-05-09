@@ -1,4 +1,14 @@
-import { useEffect, useState } from 'react'
+/**
+ * 账户资产（对齐 any-auto-register 的 Accounts 页）
+ *
+ * 关键改造：
+ *   - 头部概览：总数 + lifecycle_status / plan_state / validity_status 三组分布
+ *   - 表格：每行显示 email / sso / 生命周期 / 套餐 / 有效性 / 备注 / 创建时间
+ *   - 行内编辑：lifecycle / plan_state / validity / notes（弹窗）
+ *   - 筛选：按 lifecycle / plan / validity / 关键字搜索
+ *   - 批量导出：JSON / CSV / 纯 SSO 列表
+ */
+import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import {
   Users,
@@ -7,10 +17,28 @@ import {
   FileJson,
   FileText,
   FileSpreadsheet,
+  Trash2,
+  Pencil,
+  Copy,
+  X,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Star,
+  AlertCircle,
+  Filter,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useGrokStore } from '@/stores/grok-store'
-import { accountApi } from '@/lib/grok-api'
+import {
+  accountApi,
+  type AccountEntry,
+  type AccountLifecycle,
+  type AccountPlanState,
+  type AccountValidity,
+} from '@/lib/grok-api'
 import { formatBackendTime } from '@/lib/grok-time'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,6 +48,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Table,
   TableBody,
@@ -29,33 +58,127 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
+// ============== 枚举标签 ==============
+
+const LIFECYCLE_OPTIONS: {
+  key: AccountLifecycle
+  label: string
+  color: string
+  icon: React.ElementType
+}[] = [
+  {
+    key: 'registered',
+    label: '已注册',
+    color: 'text-sky-600 dark:text-sky-400',
+    icon: CheckCircle2,
+  },
+  {
+    key: 'trial',
+    label: '试用中',
+    color: 'text-violet-600 dark:text-violet-400',
+    icon: Star,
+  },
+  {
+    key: 'subscribed',
+    label: '已订阅',
+    color: 'text-emerald-600 dark:text-emerald-400',
+    icon: Star,
+  },
+  {
+    key: 'expired',
+    label: '已过期',
+    color: 'text-amber-600 dark:text-amber-400',
+    icon: Clock,
+  },
+  {
+    key: 'invalid',
+    label: '已失效',
+    color: 'text-red-600 dark:text-red-400',
+    icon: XCircle,
+  },
+]
+
+const PLAN_OPTIONS: { key: AccountPlanState; label: string }[] = [
+  { key: 'free', label: 'Free' },
+  { key: 'trial', label: 'Trial' },
+  { key: 'pro', label: 'Pro' },
+  { key: 'team', label: 'Team' },
+  { key: 'unknown', label: 'Unknown' },
+]
+
+const VALIDITY_OPTIONS: {
+  key: AccountValidity
+  label: string
+  icon: React.ElementType
+  color: string
+}[] = [
+  {
+    key: 'valid',
+    label: '有效',
+    icon: CheckCircle2,
+    color: 'text-emerald-600 dark:text-emerald-400',
+  },
+  {
+    key: 'invalid',
+    label: '失效',
+    icon: XCircle,
+    color: 'text-red-600 dark:text-red-400',
+  },
+  {
+    key: 'unknown',
+    label: '未知',
+    icon: AlertCircle,
+    color: 'text-muted-foreground',
+  },
+]
+
+// ============== 主组件 ==============
+
 function AccountsPage() {
-  const { accounts, loadingAccounts, fetchAccounts } = useGrokStore()
+  const {
+    accounts,
+    accountSummary,
+    loadingAccounts,
+    fetchAccounts,
+    fetchAccountSummary,
+    updateAccount,
+    deleteAccount,
+  } = useGrokStore()
+
   const [search, setSearch] = useState('')
+  const [filterLifecycle, setFilterLifecycle] = useState<string>('')
+  const [filterPlan, setFilterPlan] = useState<string>('')
+  const [filterValidity, setFilterValidity] = useState<string>('')
+  const [editing, setEditing] = useState<AccountEntry | null>(null)
 
   useEffect(() => {
-    fetchAccounts(1000)
-  }, [fetchAccounts])
+    fetchAccounts(2000)
+    fetchAccountSummary()
+  }, [fetchAccounts, fetchAccountSummary])
 
-  const filtered = accounts.filter((a) => {
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return true
-    return (
-      a.email.toLowerCase().includes(q) ||
-      a.sso.toLowerCase().includes(q) ||
-      (a.proxy_url || '').toLowerCase().includes(q)
-    )
-  })
+    return accounts.filter((a) => {
+      if (filterLifecycle && a.lifecycle_status !== filterLifecycle) return false
+      if (filterPlan && a.plan_state !== filterPlan) return false
+      if (filterValidity && a.validity_status !== filterValidity) return false
+      if (!q) return true
+      return (
+        a.email.toLowerCase().includes(q) ||
+        a.sso.toLowerCase().includes(q) ||
+        (a.proxy_url || '').toLowerCase().includes(q) ||
+        (a.notes || '').toLowerCase().includes(q)
+      )
+    })
+  }, [accounts, search, filterLifecycle, filterPlan, filterValidity])
 
   const openExport = (fmt: 'json' | 'csv' | 'sso') => {
     const pw = localStorage.getItem('console_password') || ''
-    // 导出接口需要 Authorization；由于 a 标签下载无法带自定义 header，
-    // 采用 fetch + blob 的方式
     fetch(accountApi.exportUrl(fmt), {
       headers: pw ? { Authorization: `Bearer ${pw}` } : undefined,
     })
-      .then((r) => r.blob().then((blob) => ({ blob, r })))
-      .then(({ blob, r }) => {
+      .then((r) => r.blob().then((blob) => ({ r, blob })))
+      .then(({ r, blob }) => {
         const cd = r.headers.get('content-disposition') || ''
         const m = cd.match(/filename="?([^";]+)"?/i)
         const filename = m ? m[1] : `grok-accounts.${fmt}`
@@ -66,20 +189,38 @@ function AccountsPage() {
         a.click()
         URL.revokeObjectURL(url)
       })
-      .catch(() => {
-        alert('导出失败')
-      })
+      .catch(() => toast.error('导出失败'))
+  }
+
+  const handleDelete = async (a: AccountEntry) => {
+    if (!window.confirm(`确认删除账号 ${a.email || `#${a.id}`}？`)) return
+    try {
+      await deleteAccount(a.id)
+      toast.success('已删除')
+    } catch {
+      toast.error('删除失败')
+    }
+  }
+
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success('已复制')
+    } catch {
+      toast.error('复制失败')
+    }
   }
 
   return (
     <div className='space-y-6 p-6'>
+      {/* 标题 */}
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-3'>
           <Users className='text-primary size-6' />
           <div>
-            <h1 className='text-2xl font-bold'>账号管理</h1>
+            <h1 className='text-2xl font-bold'>账户资产</h1>
             <p className='text-muted-foreground mt-0.5 text-sm'>
-              全部注册成功的账号，支持导出 JSON / CSV / 纯 SSO 列表
+              账号全生命周期管理：生命周期 / 套餐 / 有效性 · 行内编辑 · 批量导出
             </p>
           </div>
         </div>
@@ -87,7 +228,10 @@ function AccountsPage() {
           <Button
             variant='outline'
             size='sm'
-            onClick={() => fetchAccounts(1000)}
+            onClick={() => {
+              fetchAccounts(2000)
+              fetchAccountSummary()
+            }}
             disabled={loadingAccounts}
           >
             <RefreshCw
@@ -111,83 +255,506 @@ function AccountsPage() {
         </div>
       </div>
 
+      {/* 概览 */}
+      <AssetSummary
+        total={accountSummary?.total ?? accounts.length}
+        lifecycle={accountSummary?.lifecycle_status || {}}
+        plans={accountSummary?.plan_state || {}}
+        validity={accountSummary?.validity_status || {}}
+      />
+
+      {/* 筛选条 */}
       <Card>
-        <CardHeader className='flex-row items-center justify-between'>
-          <CardTitle className='text-base'>
-            账号列表
-            <span className='text-muted-foreground ml-2 text-xs font-normal'>
-              共 {accounts.length} 个，过滤后 {filtered.length} 个
+        <CardContent className='py-4'>
+          <div className='flex flex-wrap items-center gap-3'>
+            <div className='flex items-center gap-1.5 text-xs text-muted-foreground'>
+              <Filter size={12} />
+              筛选
+            </div>
+            <FilterSelect
+              label='生命周期'
+              value={filterLifecycle}
+              onChange={setFilterLifecycle}
+              options={LIFECYCLE_OPTIONS.map((o) => ({
+                key: o.key,
+                label: o.label,
+              }))}
+            />
+            <FilterSelect
+              label='套餐'
+              value={filterPlan}
+              onChange={setFilterPlan}
+              options={PLAN_OPTIONS.map((o) => ({
+                key: o.key,
+                label: o.label,
+              }))}
+            />
+            <FilterSelect
+              label='有效性'
+              value={filterValidity}
+              onChange={setFilterValidity}
+              options={VALIDITY_OPTIONS.map((o) => ({
+                key: o.key,
+                label: o.label,
+              }))}
+            />
+            <Input
+              placeholder='按邮箱 / SSO / 代理 / 备注 搜索'
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className='max-w-[280px]'
+            />
+            {(filterLifecycle ||
+              filterPlan ||
+              filterValidity ||
+              search) && (
+              <Button
+                variant='ghost'
+                size='sm'
+                onClick={() => {
+                  setSearch('')
+                  setFilterLifecycle('')
+                  setFilterPlan('')
+                  setFilterValidity('')
+                }}
+              >
+                <X size={14} />
+                清空
+              </Button>
+            )}
+            <span className='text-muted-foreground ml-auto text-xs'>
+              共 {accounts.length} 条 · 过滤后 {filtered.length}
             </span>
-          </CardTitle>
-          <Input
-            placeholder='按邮箱 / SSO / 代理 搜索'
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className='max-w-[280px]'
-          />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 表格 */}
+      <Card>
+        <CardHeader className='pb-3'>
+          <CardTitle className='text-base'>账号列表</CardTitle>
         </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
-            <div className='text-muted-foreground py-10 text-center text-sm'>
+            <div className='text-muted-foreground py-10 text-center'>
               <FileText className='mx-auto mb-3 size-10 opacity-30' />
-              {accounts.length === 0 ? '暂无账号' : '没有匹配的账号'}
+              <div className='text-sm'>
+                {accounts.length === 0 ? '暂无账号' : '没有匹配的账号'}
+              </div>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>邮箱</TableHead>
-                  <TableHead>SSO Token</TableHead>
-                  <TableHead>任务</TableHead>
-                  <TableHead>代理</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>创建时间</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.slice(0, 500).map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell className='font-mono text-xs'>
-                      #{a.id}
-                    </TableCell>
-                    <TableCell className='max-w-[200px] truncate text-sm'>
-                      {a.email || '-'}
-                    </TableCell>
-                    <TableCell className='max-w-[240px] truncate font-mono text-xs'>
-                      {a.sso}
-                    </TableCell>
-                    <TableCell className='text-muted-foreground text-xs'>
-                      {a.task_id ? `#${a.task_id}` : '-'}
-                    </TableCell>
-                    <TableCell className='max-w-[200px] truncate font-mono text-xs'>
-                      {a.proxy_url || '-'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          a.status === 'active' ? 'default' : 'secondary'
-                        }
-                      >
-                        {a.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className='text-muted-foreground text-xs'>
-                      {formatBackendTime(a.created_at)}
-                    </TableCell>
+            <div className='overflow-x-auto'>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className='w-[60px]'>ID</TableHead>
+                    <TableHead>邮箱</TableHead>
+                    <TableHead>SSO Token</TableHead>
+                    <TableHead>生命周期</TableHead>
+                    <TableHead>套餐</TableHead>
+                    <TableHead>有效性</TableHead>
+                    <TableHead>备注</TableHead>
+                    <TableHead>创建时间</TableHead>
+                    <TableHead className='text-right'>操作</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filtered.slice(0, 500).map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell className='font-mono text-xs'>
+                        #{a.id}
+                      </TableCell>
+                      <TableCell
+                        className='max-w-[180px] truncate text-sm'
+                        title={a.email || '(空)'}
+                      >
+                        {a.email || <span className='text-muted-foreground'>-</span>}
+                      </TableCell>
+                      <TableCell>
+                        <div className='flex items-center gap-1'>
+                          <span
+                            className='max-w-[180px] truncate font-mono text-xs'
+                            title={a.sso}
+                          >
+                            {a.sso}
+                          </span>
+                          <Button
+                            variant='ghost'
+                            size='icon'
+                            className='h-6 w-6'
+                            onClick={() => copy(a.sso)}
+                          >
+                            <Copy size={11} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <LifecycleBadge value={a.lifecycle_status} />
+                      </TableCell>
+                      <TableCell>
+                        <PlanBadge value={a.plan_state} />
+                      </TableCell>
+                      <TableCell>
+                        <ValidityBadge value={a.validity_status} />
+                      </TableCell>
+                      <TableCell
+                        className='max-w-[160px] truncate text-xs'
+                        title={a.notes}
+                      >
+                        {a.notes || <span className='text-muted-foreground'>-</span>}
+                      </TableCell>
+                      <TableCell className='text-muted-foreground text-xs'>
+                        {formatBackendTime(a.created_at)}
+                      </TableCell>
+                      <TableCell className='text-right'>
+                        <div className='flex justify-end gap-1'>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-7 w-7'
+                            onClick={() => setEditing(a)}
+                            title='编辑'
+                          >
+                            <Pencil size={12} />
+                          </Button>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-7 w-7'
+                            onClick={() => handleDelete(a)}
+                            title='删除'
+                          >
+                            <Trash2 size={12} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
           {filtered.length > 500 && (
             <div className='text-muted-foreground mt-3 text-center text-xs'>
-              仅显示前 500 条，导出可拿全部
+              仅显示前 500 条；导出可拿全部
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* 编辑弹窗 */}
+      {editing && (
+        <EditDialog
+          account={editing}
+          onClose={() => setEditing(null)}
+          onSave={async (patch) => {
+            try {
+              await updateAccount(editing.id, patch)
+              toast.success('已保存')
+              setEditing(null)
+            } catch {
+              toast.error('保存失败')
+            }
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+// ============== 概览 ==============
+
+function AssetSummary({
+  total,
+  lifecycle,
+  plans,
+  validity,
+}: {
+  total: number
+  lifecycle: Record<string, number>
+  plans: Record<string, number>
+  validity: Record<string, number>
+}) {
+  return (
+    <div className='grid gap-4 lg:grid-cols-4'>
+      <Card>
+        <CardContent className='py-4'>
+          <div className='text-muted-foreground mb-1 text-xs tracking-wider uppercase'>
+            账号总数
+          </div>
+          <div className='text-foreground text-3xl font-bold'>{total}</div>
+        </CardContent>
+      </Card>
+      <DistCard
+        title='生命周期'
+        data={lifecycle}
+        options={LIFECYCLE_OPTIONS.map((o) => ({
+          key: o.key,
+          label: o.label,
+        }))}
+      />
+      <DistCard
+        title='套餐分布'
+        data={plans}
+        options={PLAN_OPTIONS.map((o) => ({ key: o.key, label: o.label }))}
+      />
+      <DistCard
+        title='有效性'
+        data={validity}
+        options={VALIDITY_OPTIONS.map((o) => ({
+          key: o.key,
+          label: o.label,
+        }))}
+      />
+    </div>
+  )
+}
+
+function DistCard({
+  title,
+  data,
+  options,
+}: {
+  title: string
+  data: Record<string, number>
+  options: { key: string; label: string }[]
+}) {
+  const total = Object.values(data).reduce((a, b) => a + b, 0)
+  return (
+    <Card>
+      <CardContent className='py-4'>
+        <div className='text-muted-foreground mb-2 text-xs tracking-wider uppercase'>
+          {title}
+        </div>
+        <div className='space-y-1.5'>
+          {options.map((o) => {
+            const n = data[o.key] ?? 0
+            const pct = total > 0 ? (n / total) * 100 : 0
+            return (
+              <div key={o.key} className='flex items-center gap-2 text-xs'>
+                <span className='text-muted-foreground w-[52px] shrink-0'>
+                  {o.label}
+                </span>
+                <div className='bg-muted relative h-1.5 flex-1 overflow-hidden rounded-full'>
+                  <div
+                    className='bg-primary h-full'
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className='w-[24px] text-right font-semibold'>{n}</span>
+              </div>
+            )
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ============== 编辑弹窗 ==============
+
+function EditDialog({
+  account,
+  onClose,
+  onSave,
+}: {
+  account: AccountEntry
+  onClose: () => void
+  onSave: (
+    patch: Partial<{
+      lifecycle_status: AccountLifecycle
+      plan_state: AccountPlanState
+      validity_status: AccountValidity
+      notes: string
+    }>
+  ) => void | Promise<void>
+}) {
+  const [form, setForm] = useState({
+    lifecycle_status: account.lifecycle_status,
+    plan_state: account.plan_state,
+    validity_status: account.validity_status,
+    notes: account.notes || '',
+  })
+
+  return (
+    <div
+      className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'
+      onClick={onClose}
+    >
+      <div
+        className='bg-card w-full max-w-xl rounded-xl border shadow-2xl'
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className='flex items-center justify-between border-b p-4'>
+          <div>
+            <h2 className='text-base font-semibold'>编辑账号</h2>
+            <p className='text-muted-foreground text-xs'>
+              #{account.id} · {account.email || '(空邮箱)'}
+            </p>
+          </div>
+          <Button variant='ghost' size='icon' onClick={onClose}>
+            <X size={16} />
+          </Button>
+        </div>
+        <div className='space-y-4 p-4'>
+          <div className='space-y-2'>
+            <Label>生命周期</Label>
+            <div className='grid grid-cols-5 gap-2'>
+              {LIFECYCLE_OPTIONS.map((o) => {
+                const selected = form.lifecycle_status === o.key
+                return (
+                  <button
+                    key={o.key}
+                    type='button'
+                    onClick={() =>
+                      setForm({ ...form, lifecycle_status: o.key })
+                    }
+                    className={cn(
+                      'rounded-md border p-2 text-center text-xs transition-colors',
+                      selected
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'hover:bg-muted'
+                    )}
+                  >
+                    {o.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className='space-y-2'>
+            <Label>套餐</Label>
+            <div className='grid grid-cols-5 gap-2'>
+              {PLAN_OPTIONS.map((o) => {
+                const selected = form.plan_state === o.key
+                return (
+                  <button
+                    key={o.key}
+                    type='button'
+                    onClick={() => setForm({ ...form, plan_state: o.key })}
+                    className={cn(
+                      'rounded-md border p-2 text-center text-xs transition-colors',
+                      selected
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'hover:bg-muted'
+                    )}
+                  >
+                    {o.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className='space-y-2'>
+            <Label>有效性</Label>
+            <div className='grid grid-cols-3 gap-2'>
+              {VALIDITY_OPTIONS.map((o) => {
+                const selected = form.validity_status === o.key
+                return (
+                  <button
+                    key={o.key}
+                    type='button'
+                    onClick={() =>
+                      setForm({ ...form, validity_status: o.key })
+                    }
+                    className={cn(
+                      'rounded-md border p-2 text-center text-xs transition-colors',
+                      selected
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'hover:bg-muted'
+                    )}
+                  >
+                    {o.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className='space-y-2'>
+            <Label htmlFor='edit-notes'>备注</Label>
+            <Input
+              id='edit-notes'
+              placeholder='可选'
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </div>
+          {account.last_error && (
+            <div className='text-muted-foreground text-xs'>
+              最后一次错误：<span className='text-red-500'>{account.last_error}</span>
+            </div>
+          )}
+        </div>
+        <div className='flex justify-end gap-2 border-t p-4'>
+          <Button variant='outline' onClick={onClose}>
+            取消
+          </Button>
+          <Button onClick={() => onSave(form)}>保存</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============== 小组件 ==============
+
+function LifecycleBadge({ value }: { value: AccountLifecycle }) {
+  const cfg = LIFECYCLE_OPTIONS.find((o) => o.key === value) || LIFECYCLE_OPTIONS[0]
+  const Icon = cfg.icon
+  return (
+    <Badge variant='outline' className='gap-1'>
+      <Icon size={10} className={cfg.color} />
+      {cfg.label}
+    </Badge>
+  )
+}
+
+function PlanBadge({ value }: { value: AccountPlanState }) {
+  const cfg = PLAN_OPTIONS.find((o) => o.key === value) || PLAN_OPTIONS[4]
+  const variant: 'default' | 'secondary' | 'outline' =
+    cfg.key === 'pro' || cfg.key === 'team'
+      ? 'default'
+      : cfg.key === 'trial'
+        ? 'secondary'
+        : 'outline'
+  return <Badge variant={variant}>{cfg.label}</Badge>
+}
+
+function ValidityBadge({ value }: { value: AccountValidity }) {
+  const cfg = VALIDITY_OPTIONS.find((o) => o.key === value) || VALIDITY_OPTIONS[2]
+  const Icon = cfg.icon
+  return (
+    <span className={cn('inline-flex items-center gap-1 text-xs', cfg.color)}>
+      <Icon size={12} />
+      {cfg.label}
+    </span>
+  )
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: { key: string; label: string }[]
+}) {
+  return (
+    <select
+      className='bg-background h-8 rounded-md border px-2 text-xs'
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value=''>{label}：全部</option>
+      {options.map((o) => (
+        <option key={o.key} value={o.key}>
+          {label}：{o.label}
+        </option>
+      ))}
+    </select>
   )
 }
 

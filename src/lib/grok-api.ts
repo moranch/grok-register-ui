@@ -179,15 +179,39 @@ export interface MailboxEntry {
 }
 
 // ---- 账号 ----
+export type AccountLifecycle =
+  | 'registered'
+  | 'trial'
+  | 'subscribed'
+  | 'expired'
+  | 'invalid'
+
+export type AccountPlanState = 'free' | 'trial' | 'pro' | 'team' | 'unknown'
+
+export type AccountValidity = 'valid' | 'invalid' | 'unknown'
+
 export interface AccountEntry {
   id: number
   email: string
   sso: string
+  password: string
   task_id: number | null
   proxy_url: string
   status: string
+  lifecycle_status: AccountLifecycle
+  plan_state: AccountPlanState
+  validity_status: AccountValidity
+  last_error: string
   last_checked_at: string
+  notes: string
   created_at: string
+}
+
+export interface AccountAssetSummary {
+  total: number
+  lifecycle_status: Record<string, number>
+  plan_state: Record<string, number>
+  validity_status: Record<string, number>
 }
 
 // ---- 统计 ----
@@ -300,11 +324,32 @@ export const mailboxApi = {
       message: string
       checked_at: string
     }>(`/mailboxes/${id}/test`),
+  domains: (id: number) =>
+    grokApi.get<{
+      ok: boolean
+      items: string[]
+      endpoint?: string
+      message?: string
+      checked_at: string
+    }>(`/mailboxes/${id}/domains`),
 }
 
 export const accountApi = {
   list: (limit = 500) =>
     grokApi.get<{ items: AccountEntry[] }>('/accounts', { params: { limit } }),
+  summary: () =>
+    grokApi.get<AccountAssetSummary>('/accounts/summary'),
+  update: (
+    id: number,
+    data: Partial<{
+      lifecycle_status: AccountLifecycle
+      plan_state: AccountPlanState
+      validity_status: AccountValidity
+      notes: string
+      last_error: string
+    }>
+  ) => grokApi.patch<{ account: AccountEntry }>(`/accounts/${id}`, data),
+  delete: (id: number) => grokApi.delete(`/accounts/${id}`),
   exportUrl: (fmt: 'json' | 'csv' | 'sso') =>
     `/api/accounts/export?fmt=${fmt}`,
 }

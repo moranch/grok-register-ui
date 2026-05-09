@@ -12,6 +12,7 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
+  Globe,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useGrokStore } from '@/stores/grok-store'
@@ -19,6 +20,7 @@ import type {
   MailboxEntry,
   MailboxProviderType,
 } from '@/lib/grok-api'
+import { mailboxApi } from '@/lib/grok-api'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -68,6 +70,15 @@ function MailboxesPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [testingId, setTestingId] = useState<number | null>(null)
   const [showSecrets, setShowSecrets] = useState(false)
+  // 当前正在查看域名的 provider id + 拉到的域名列表
+  const [domainViewId, setDomainViewId] = useState<number | null>(null)
+  const [domainLoading, setDomainLoading] = useState(false)
+  const [domainResult, setDomainResult] = useState<{
+    items: string[]
+    ok: boolean
+    message?: string
+    endpoint?: string
+  } | null>(null)
 
   useEffect(() => {
     fetchMailboxes()
@@ -156,6 +167,41 @@ function MailboxesPage() {
       toast.error('测试失败')
     } finally {
       setTestingId(null)
+    }
+  }
+
+  const handleViewDomains = async (id: number) => {
+    setDomainViewId(id)
+    setDomainLoading(true)
+    setDomainResult(null)
+    try {
+      const { data } = await mailboxApi.domains(id)
+      setDomainResult({
+        items: data.items || [],
+        ok: data.ok,
+        message: data.message,
+        endpoint: data.endpoint,
+      })
+    } catch (e) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setDomainResult({
+        items: [],
+        ok: false,
+        message: err?.response?.data?.detail || '请求失败',
+      })
+    } finally {
+      setDomainLoading(false)
+    }
+  }
+
+  const applyDomain = async (domain: string) => {
+    if (!domainViewId) return
+    try {
+      await updateMailbox(domainViewId, { domain })
+      toast.success(`已将域名设为 ${domain}`)
+      setDomainViewId(null)
+    } catch {
+      toast.error('更新失败')
     }
   }
 
@@ -391,6 +437,17 @@ function MailboxesPage() {
                         {m.api_base}
                       </div>
 
+                      {/* 已配置域名 */}
+                      {m.domain && (
+                        <div className='mb-2 flex items-center gap-2 text-xs'>
+                          <Globe size={12} className='text-muted-foreground' />
+                          <span className='text-muted-foreground'>当前域名</span>
+                          <code className='bg-muted rounded px-1.5 py-0.5 font-mono'>
+                            {m.domain}
+                          </code>
+                        </div>
+                      )}
+
                       <div className='mb-3 flex flex-wrap items-center gap-2 text-xs'>
                         <Badge
                           variant={
@@ -431,6 +488,15 @@ function MailboxesPage() {
                             <Play size={12} />
                           )}
                           测试
+                        </Button>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          className='h-7 text-xs'
+                          onClick={() => handleViewDomains(m.id)}
+                        >
+                          <Globe size={12} />
+                          可用域名
                         </Button>
                         <Button
                           variant='outline'
@@ -510,6 +576,150 @@ function MailboxesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 可用域名弹窗 */}
+      {domainViewId !== null && (
+        <DomainsDialog
+          loading={domainLoading}
+          result={domainResult}
+          provider={mailboxes.find((m) => m.id === domainViewId) || null}
+          onClose={() => {
+            setDomainViewId(null)
+            setDomainResult(null)
+          }}
+          onRetry={() => handleViewDomains(domainViewId)}
+          onApply={applyDomain}
+        />
+      )}
+    </div>
+  )
+}
+
+// ======================== 可用域名弹窗 ========================
+
+function DomainsDialog({
+  loading,
+  result,
+  provider,
+  onClose,
+  onRetry,
+  onApply,
+}: {
+  loading: boolean
+  result: {
+    items: string[]
+    ok: boolean
+    message?: string
+    endpoint?: string
+  } | null
+  provider: MailboxEntry | null
+  onClose: () => void
+  onRetry: () => void
+  onApply: (domain: string) => void
+}) {
+  return (
+    <div
+      className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'
+      onClick={onClose}
+    >
+      <div
+        className='bg-card w-full max-w-xl rounded-xl border shadow-2xl'
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className='flex items-center justify-between border-b p-4'>
+          <div>
+            <div className='flex items-center gap-2 text-base font-semibold'>
+              <Globe size={16} className='text-primary' />
+              可用邮箱域名
+            </div>
+            {provider && (
+              <p className='text-muted-foreground mt-0.5 text-xs'>
+                {provider.name} ·{' '}
+                <code className='font-mono'>{provider.api_base}</code>
+              </p>
+            )}
+          </div>
+          <Button variant='ghost' size='sm' onClick={onClose}>
+            关闭
+          </Button>
+        </div>
+        <div className='max-h-[60vh] overflow-y-auto p-4'>
+          {loading ? (
+            <div className='text-muted-foreground py-10 text-center text-sm'>
+              <RefreshCw className='mx-auto mb-2 size-5 animate-spin' />
+              正在拉取域名列表…
+            </div>
+          ) : !result ? (
+            <div className='text-muted-foreground py-10 text-center text-sm'>
+              无数据
+            </div>
+          ) : !result.ok || result.items.length === 0 ? (
+            <div className='py-8 text-center'>
+              <AlertCircle className='mx-auto mb-3 size-10 text-amber-500/70' />
+              <div className='text-sm font-medium'>
+                {result.message || '没有可用域名'}
+              </div>
+              <p className='text-muted-foreground mt-2 text-xs leading-relaxed'>
+                系统会依次尝试 <code>/api/domains</code>、<code>/domains</code>、<code>/api/v1/domains</code> 三个端点。
+                如果都失败，说明该 Provider 可能不支持自动发现，需要手动在"编辑"里填写域名。
+              </p>
+              <Button
+                variant='outline'
+                size='sm'
+                className='mt-3'
+                onClick={onRetry}
+              >
+                <RefreshCw size={14} />
+                重试
+              </Button>
+            </div>
+          ) : (
+            <>
+              {result.endpoint && (
+                <div className='text-muted-foreground mb-3 text-xs'>
+                  数据来源：
+                  <code className='bg-muted mx-1 rounded px-1 py-0.5 font-mono'>
+                    {result.endpoint}
+                  </code>
+                  · 共 {result.items.length} 个
+                </div>
+              )}
+              <div className='grid gap-2'>
+                {result.items.map((d) => {
+                  const selected = provider?.domain === d
+                  return (
+                    <div
+                      key={d}
+                      className={cn(
+                        'flex items-center justify-between rounded-md border p-2.5 text-sm transition-colors',
+                        selected
+                          ? 'border-primary bg-primary/5'
+                          : 'hover:bg-muted/40'
+                      )}
+                    >
+                      <code className='font-mono text-sm'>{d}</code>
+                      {selected ? (
+                        <Badge variant='default' className='text-[10px]'>
+                          当前使用
+                        </Badge>
+                      ) : (
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          className='h-7 text-xs'
+                          onClick={() => onApply(d)}
+                        >
+                          使用此域名
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
