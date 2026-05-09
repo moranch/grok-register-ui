@@ -4,6 +4,7 @@ import {
   settingsApi,
   healthApi,
   proxyApi,
+  mailboxApi,
   accountApi,
   statsApi,
   lifecycleApi,
@@ -11,6 +12,8 @@ import {
   type SystemSettings,
   type HealthItem,
   type ProxyEntry,
+  type MailboxEntry,
+  type MailboxProviderType,
   type AccountEntry,
   type StatsOverview,
   type StatsErrorItem,
@@ -58,6 +61,28 @@ interface GrokState {
     data: { label?: string; enabled?: boolean; reset_stats?: boolean }
   ) => Promise<void>
   deleteProxy: (id: number) => Promise<void>
+
+  // Mailbox pool
+  mailboxes: MailboxEntry[]
+  loadingMailboxes: boolean
+  fetchMailboxes: () => Promise<void>
+  addMailbox: (data: {
+    name: string
+    provider_type: MailboxProviderType
+    api_base: string
+    admin_password?: string
+    domain?: string
+    site_password?: string
+    enabled?: boolean
+  }) => Promise<void>
+  updateMailbox: (
+    id: number,
+    data: Parameters<typeof mailboxApi.update>[1]
+  ) => Promise<void>
+  deleteMailbox: (id: number) => Promise<void>
+  testMailbox: (
+    id: number
+  ) => Promise<{ ok: boolean; message: string }>
 
   // Accounts
   accounts: AccountEntry[]
@@ -172,6 +197,35 @@ export const useGrokStore = create<GrokState>((set, get) => ({
   deleteProxy: async (id) => {
     await proxyApi.delete(id)
     await get().fetchProxies()
+  },
+
+  // Mailboxes
+  mailboxes: [],
+  loadingMailboxes: false,
+  fetchMailboxes: async () => {
+    set({ loadingMailboxes: true })
+    try {
+      const { data } = await mailboxApi.list()
+      set({ mailboxes: data.mailboxes })
+    } finally {
+      set({ loadingMailboxes: false })
+    }
+  },
+  addMailbox: async (data) => {
+    await mailboxApi.add(data)
+    await get().fetchMailboxes()
+  },
+  updateMailbox: async (id, data) => {
+    await mailboxApi.update(id, data)
+    await get().fetchMailboxes()
+  },
+  deleteMailbox: async (id) => {
+    await mailboxApi.delete(id)
+    await get().fetchMailboxes()
+  },
+  testMailbox: async (id) => {
+    const { data } = await mailboxApi.test(id)
+    return { ok: data.ok, message: data.message }
   },
 
   // Accounts

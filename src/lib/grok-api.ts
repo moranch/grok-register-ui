@@ -119,6 +119,26 @@ export interface ProxyEntry {
   created_at: string
 }
 
+// ---- 邮箱 Provider ----
+export type MailboxProviderType = 'tmail' | 'duckmail' | 'moemail' | 'custom'
+
+export interface MailboxEntry {
+  id: number
+  name: string
+  provider_type: MailboxProviderType
+  api_base: string
+  admin_password: string
+  domain: string
+  site_password: string
+  enabled: boolean
+  success_count: number
+  failure_count: number
+  consecutive_failures: number
+  success_rate: number
+  last_used_at: string
+  created_at: string
+}
+
 // ---- 账号 ----
 export interface AccountEntry {
   id: number
@@ -207,6 +227,40 @@ export const proxyApi = {
     data: { label?: string; enabled?: boolean; reset_stats?: boolean }
   ) => grokApi.patch<{ proxy: ProxyEntry }>(`/proxies/${id}`, data),
   delete: (id: number) => grokApi.delete(`/proxies/${id}`),
+}
+
+export const mailboxApi = {
+  list: () => grokApi.get<{ mailboxes: MailboxEntry[] }>('/mailboxes'),
+  add: (data: {
+    name: string
+    provider_type: MailboxProviderType
+    api_base: string
+    admin_password?: string
+    domain?: string
+    site_password?: string
+    enabled?: boolean
+  }) => grokApi.post<{ mailbox: MailboxEntry }>('/mailboxes', data),
+  update: (
+    id: number,
+    data: Partial<{
+      name: string
+      provider_type: MailboxProviderType
+      api_base: string
+      admin_password: string
+      domain: string
+      site_password: string
+      enabled: boolean
+      reset_stats: boolean
+    }>
+  ) => grokApi.patch<{ mailbox: MailboxEntry }>(`/mailboxes/${id}`, data),
+  delete: (id: number) => grokApi.delete(`/mailboxes/${id}`),
+  test: (id: number) =>
+    grokApi.post<{
+      ok: boolean
+      status_code?: number
+      message: string
+      checked_at: string
+    }>(`/mailboxes/${id}/test`),
 }
 
 export const accountApi = {

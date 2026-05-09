@@ -7,6 +7,7 @@ import {
   Users,
   BarChart3,
   Monitor,
+  Mail,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { GrokLogo } from '@/components/grok-logo'
@@ -67,6 +68,11 @@ export function useSidebarData(): SidebarData {
             title: t('代理池'),
             url: '/proxies',
             icon: Network,
+          },
+          {
+            title: t('邮箱 Provider'),
+            url: '/mailboxes',
+            icon: Mail,
           },
           {
             title: t('健康检查'),
