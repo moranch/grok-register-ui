@@ -120,6 +120,7 @@ function MailboxesPage() {
         await addMailbox({ ...form, enabled: true })
         toast.success('已添加')
       }
+      setDialogOpen(false)
       setEditingId(null)
       setForm(EMPTY_FORM)
     } catch (e) {
@@ -226,7 +227,24 @@ function MailboxesPage() {
 
   const total = mailboxes.length
   const enabledCount = mailboxes.filter((m) => m.enabled).length
-  const activeId = editingId
+  // 是否打开新增/编辑弹窗
+  const [dialogOpen, setDialogOpen] = useState(false)
+
+  const openAddDialog = () => {
+    setEditingId(null)
+    setForm(EMPTY_FORM)
+    setDialogOpen(true)
+  }
+
+  const openEditDialog = (m: MailboxEntry) => {
+    startEdit(m)
+    setDialogOpen(true)
+  }
+
+  const closeDialog = () => {
+    setDialogOpen(false)
+    cancelEdit()
+  }
 
   return (
     <div className='space-y-6 p-6'>
@@ -271,6 +289,10 @@ function MailboxesPage() {
             />
             刷新
           </Button>
+          <Button size='sm' onClick={openAddDialog}>
+            <Plus size={16} />
+            新增 Provider
+          </Button>
         </div>
       </div>
 
@@ -289,138 +311,15 @@ function MailboxesPage() {
         />
       </div>
 
-      {/* 左右布局：右侧列表 + 左侧表单 */}
-      <div className='grid gap-6 lg:grid-cols-[360px_1fr]'>
-        {/* 左：表单 */}
-        <Card className='h-fit'>
-          <CardHeader>
-            <CardTitle className='text-base'>
-              {editingId ? `编辑 #${editingId}` : '新增 Provider'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className='space-y-4'>
-            {/* Provider 类型 */}
-            <div className='space-y-2'>
-              <Label>Provider 类型</Label>
-              <div className='grid gap-2'>
-                {PROVIDER_OPTIONS.map((opt) => {
-                  const selected = form.provider_type === opt.key
-                  return (
-                    <label
-                      key={opt.key}
-                      className={cn(
-                        'cursor-pointer rounded-md border p-2.5 text-xs transition-all',
-                        selected
-                          ? 'border-primary bg-primary/5 shadow-sm'
-                          : 'hover:border-primary/40 hover:bg-muted/40'
-                      )}
-                    >
-                      <input
-                        type='radio'
-                        name='provider_type'
-                        className='sr-only'
-                        checked={selected}
-                        onChange={() =>
-                          setForm({ ...form, provider_type: opt.key })
-                        }
-                      />
-                      <div className='flex items-center justify-between'>
-                        <span className='font-semibold'>{opt.label}</span>
-                        {selected && (
-                          <span className='bg-primary/20 text-primary rounded px-1.5 py-0.5 text-[10px]'>
-                            已选
-                          </span>
-                        )}
-                      </div>
-                      <div className='text-muted-foreground mt-0.5 text-[11px]'>
-                        {opt.hint}
-                      </div>
-                    </label>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className='space-y-2'>
-              <Label htmlFor='mbox-name'>名称</Label>
-              <Input
-                id='mbox-name'
-                placeholder='例如：tmail-1'
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-            </div>
-            <div className='space-y-2'>
-              <Label htmlFor='mbox-api'>API Base</Label>
-              <Input
-                id='mbox-api'
-                placeholder='https://mail.example.com'
-                value={form.api_base}
-                onChange={(e) =>
-                  setForm({ ...form, api_base: e.target.value })
-                }
-              />
-            </div>
-            <div className='space-y-2'>
-              <Label htmlFor='mbox-admin'>管理口令 / API Key</Label>
-              <Input
-                id='mbox-admin'
-                type={showSecrets ? 'text' : 'password'}
-                placeholder='sk_xxx 或 adminToken'
-                value={form.admin_password}
-                onChange={(e) =>
-                  setForm({ ...form, admin_password: e.target.value })
-                }
-              />
-            </div>
-            <div className='space-y-2'>
-              <Label htmlFor='mbox-domain'>域名（可选）</Label>
-              <Input
-                id='mbox-domain'
-                placeholder='留空则自动选择'
-                value={form.domain}
-                onChange={(e) => setForm({ ...form, domain: e.target.value })}
-              />
-            </div>
-            <div className='space-y-2'>
-              <Label htmlFor='mbox-site'>站点密码（可选）</Label>
-              <Input
-                id='mbox-site'
-                type={showSecrets ? 'text' : 'password'}
-                placeholder='x-custom-auth'
-                value={form.site_password}
-                onChange={(e) =>
-                  setForm({ ...form, site_password: e.target.value })
-                }
-              />
-            </div>
-            <div className='flex gap-2 pt-2'>
-              <Button
-                className='flex-1'
-                onClick={handleSubmit}
-                disabled={adding}
-              >
-                {editingId ? <RotateCcw size={14} /> : <Plus size={14} />}
-                {editingId ? '保存修改' : '添加'}
-              </Button>
-              {editingId && (
-                <Button variant='outline' onClick={cancelEdit}>
-                  取消
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 右：列表 */}
-        <Card className='h-fit'>
-          <CardHeader className='flex-row items-center justify-between'>
-            <CardTitle className='text-base'>Provider 列表</CardTitle>
-            <span className='text-muted-foreground text-xs'>
-              共 {total} 个
-            </span>
-          </CardHeader>
-          <CardContent>
+      {/* 列表（全宽） */}
+      <Card>
+        <CardHeader className='flex-row items-center justify-between'>
+          <CardTitle className='text-base'>Provider 列表</CardTitle>
+          <span className='text-muted-foreground text-xs'>
+            共 {total} 个
+          </span>
+        </CardHeader>
+        <CardContent>
             {mailboxes.length === 0 ? (
               <div className='text-muted-foreground py-10 text-center'>
                 <Mail className='mx-auto mb-3 size-10 opacity-30' />
@@ -561,7 +460,7 @@ function MailboxesPage() {
                           variant='outline'
                           size='sm'
                           className='h-7 text-xs'
-                          onClick={() => startEdit(m)}
+                          onClick={() => openEditDialog(m)}
                         >
                           编辑
                         </Button>
@@ -591,7 +490,6 @@ function MailboxesPage() {
             )}
           </CardContent>
         </Card>
-      </div>
 
       {/* 说明 */}
       <Card>
@@ -636,6 +534,19 @@ function MailboxesPage() {
         </CardContent>
       </Card>
 
+      {/* 新增/编辑 弹窗 */}
+      {dialogOpen && (
+        <ProviderDialog
+          editingId={editingId}
+          form={form}
+          setForm={setForm}
+          showSecrets={showSecrets}
+          adding={adding}
+          onClose={closeDialog}
+          onSubmit={handleSubmit}
+        />
+      )}
+
       {/* 可用域名弹窗 */}
       {domainViewId !== null && (
         <DomainsDialog
@@ -650,6 +561,160 @@ function MailboxesPage() {
           onApply={applyDomain}
         />
       )}
+    </div>
+  )
+}
+
+// ======================== 新增 / 编辑 Provider 弹窗 ========================
+
+function ProviderDialog({
+  editingId,
+  form,
+  setForm,
+  showSecrets,
+  adding,
+  onClose,
+  onSubmit,
+}: {
+  editingId: number | null
+  form: typeof EMPTY_FORM
+  setForm: React.Dispatch<React.SetStateAction<typeof EMPTY_FORM>>
+  showSecrets: boolean
+  adding: boolean
+  onClose: () => void
+  onSubmit: () => void
+}) {
+  return (
+    <div
+      className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'
+      onClick={onClose}
+    >
+      <div
+        className='bg-card flex max-h-[90vh] w-full max-w-xl flex-col rounded-xl border shadow-2xl'
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className='flex shrink-0 items-center justify-between border-b p-4'>
+          <div className='flex items-center gap-2'>
+            <Mail className='text-primary size-5' />
+            <h2 className='text-base font-semibold'>
+              {editingId ? `编辑 Provider #${editingId}` : '新增 Provider'}
+            </h2>
+          </div>
+          <Button variant='ghost' size='icon' onClick={onClose}>
+            <XCircle size={16} />
+          </Button>
+        </div>
+        <div className='flex-1 space-y-4 overflow-y-auto p-4'>
+          {/* Provider 类型 */}
+          <div className='space-y-2'>
+            <Label>Provider 类型</Label>
+            <div className='grid gap-2'>
+              {PROVIDER_OPTIONS.map((opt) => {
+                const selected = form.provider_type === opt.key
+                return (
+                  <label
+                    key={opt.key}
+                    className={cn(
+                      'cursor-pointer rounded-md border p-2.5 text-xs transition-all',
+                      selected
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'hover:border-primary/40 hover:bg-muted/40'
+                    )}
+                  >
+                    <input
+                      type='radio'
+                      name='provider_type'
+                      className='sr-only'
+                      checked={selected}
+                      onChange={() =>
+                        setForm({ ...form, provider_type: opt.key })
+                      }
+                    />
+                    <div className='flex items-center justify-between'>
+                      <span className='font-semibold'>{opt.label}</span>
+                      {selected && (
+                        <span className='bg-primary/20 text-primary rounded px-1.5 py-0.5 text-[10px]'>
+                          已选
+                        </span>
+                      )}
+                    </div>
+                    <div className='text-muted-foreground mt-0.5 text-[11px]'>
+                      {opt.hint}
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className='grid gap-3 md:grid-cols-2'>
+            <div className='space-y-2'>
+              <Label htmlFor='mbox-name'>名称</Label>
+              <Input
+                id='mbox-name'
+                placeholder='例如：tmail-1'
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='mbox-api'>API Base</Label>
+              <Input
+                id='mbox-api'
+                placeholder='https://mail.example.com'
+                value={form.api_base}
+                onChange={(e) =>
+                  setForm({ ...form, api_base: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <div className='space-y-2'>
+            <Label htmlFor='mbox-admin'>管理口令 / API Key</Label>
+            <Input
+              id='mbox-admin'
+              type={showSecrets ? 'text' : 'password'}
+              placeholder='sk_xxx 或 adminToken'
+              value={form.admin_password}
+              onChange={(e) =>
+                setForm({ ...form, admin_password: e.target.value })
+              }
+            />
+          </div>
+          <div className='grid gap-3 md:grid-cols-2'>
+            <div className='space-y-2'>
+              <Label htmlFor='mbox-domain'>域名（可选）</Label>
+              <Input
+                id='mbox-domain'
+                placeholder='留空则服务端随机分配'
+                value={form.domain}
+                onChange={(e) => setForm({ ...form, domain: e.target.value })}
+              />
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='mbox-site'>站点密码（可选）</Label>
+              <Input
+                id='mbox-site'
+                type={showSecrets ? 'text' : 'password'}
+                placeholder='x-custom-auth'
+                value={form.site_password}
+                onChange={(e) =>
+                  setForm({ ...form, site_password: e.target.value })
+                }
+              />
+            </div>
+          </div>
+        </div>
+        <div className='flex shrink-0 justify-end gap-2 border-t p-4'>
+          <Button variant='outline' onClick={onClose}>
+            取消
+          </Button>
+          <Button onClick={onSubmit} disabled={adding}>
+            {editingId ? <RotateCcw size={14} /> : <Plus size={14} />}
+            {adding ? '处理中...' : editingId ? '保存修改' : '添加'}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
