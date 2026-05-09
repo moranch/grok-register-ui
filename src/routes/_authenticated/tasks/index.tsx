@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import {
   Plus,
   Play,
@@ -18,9 +19,10 @@ import {
   Eye,
   Zap,
   ExternalLink,
+  Layers,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { taskApi, type Task } from '@/lib/api'
+import { taskApi, platformApi, type Task, type Platform } from '@/lib/api'
 import { useGrokStore } from '@/stores/grok-store'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -92,16 +94,51 @@ function TasksPage() {
     count: number
     notes: string
     executor: ExecutorKey
+    platform: string
+    engine_id: string
   }>({
     name: '',
     count: 50,
     notes: '',
     executor: 'default',
+    platform: 'grok',
+    engine_id: '',
   })
   const [creating, setCreating] = useState(false)
 
-  // 生成默认任务名：grok-task-<YYYYMMDDHHmmss>（本地时间，更易读）
-  const genDefaultName = () => {
+  // 拉可用平台，只展示 enabled=true 的
+  const { data: platformsData } = useQuery({
+    queryKey: ['platforms'],
+    queryFn: () => platformApi.list(),
+    staleTime: 60_000,
+  })
+  const enabledPlatforms: Platform[] = useMemo(
+    () => (platformsData?.platforms || []).filter((p) => p.enabled),
+    [platformsData]
+  )
+  const currentPlatform = useMemo<Platform | undefined>(
+    () => enabledPlatforms.find((p) => p.name === form.platform),
+    [enabledPlatforms, form.platform]
+  )
+  const currentEngines = currentPlatform?.register_engines || []
+
+  // 平台切换时重置 engine_id 到该平台的推荐/第一个
+  useEffect(() => {
+    if (!currentPlatform) return
+    const engines = currentPlatform.register_engines || []
+    if (engines.length === 0) {
+      if (form.engine_id !== '') setForm((f) => ({ ...f, engine_id: '' }))
+      return
+    }
+    const still = engines.find((e) => e.id === form.engine_id)
+    if (still) return
+    const recommended = engines.find((e) => e.is_recommended)
+    setForm((f) => ({ ...f, engine_id: (recommended || engines[0]).id }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPlatform?.name])
+
+  // 生成默认任务名：<platform>-task-<YYYYMMDDHHmmss>（本地时间，更易读）
+  const genDefaultName = (platform: string = form.platform) => {
     const d = new Date()
     const pad = (n: number) => String(n).padStart(2, '0')
     const stamp =
@@ -111,16 +148,18 @@ function TasksPage() {
       pad(d.getHours()) +
       pad(d.getMinutes()) +
       pad(d.getSeconds())
-    return `grok-task-${stamp}`
+    return `${platform || 'grok'}-task-${stamp}`
   }
 
   // 打开新建表单时自动填一个默认任务名
   const openCreateForm = () => {
     setForm({
-      name: genDefaultName(),
+      name: genDefaultName('grok'),
       count: 50,
       notes: '',
       executor: 'default',
+      platform: 'grok',
+      engine_id: '',
     })
     setShowCreate(true)
   }
@@ -181,13 +220,20 @@ function TasksPage() {
 
   const handleCreate = useCallback(async () => {
     // 名称为空时自动生成
-    const finalName = form.name.trim() || genDefaultName()
+    const finalName = form.name.trim() || genDefaultName(form.platform)
+    // 非 grok 平台必须选一个 engine
+    if (form.platform !== 'grok' && !form.engine_id) {
+      toast.error('请为该平台选择一个注册引擎 (engine_id)')
+      return
+    }
     setCreating(true)
     try {
       await createTask({
         name: finalName,
         count: form.count,
         notes: form.notes,
+        platform: form.platform || 'grok',
+        ...(form.engine_id ? { engine_id: form.engine_id } : {}),
         // executor === 'default' 就不传给后端，让后端用系统默认
         ...(form.executor !== 'default' ? { executor: form.executor } : {}),
       })
@@ -198,9 +244,13 @@ function TasksPage() {
         count: 50,
         notes: '',
         executor: 'default',
+        platform: 'grok',
+        engine_id: '',
       })
-    } catch {
-      toast.error('任务创建失败')
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.detail || e?.message || '任务创建失败'
+      toast.error(msg)
     } finally {
       setCreating(false)
     }
@@ -344,6 +394,128 @@ function TasksPage() {
                 />
               </div>
             </div>
+
+            {/* 平台选择 */}
+            <div className='space-y-2'>
+              <div className='flex items-center gap-2'>
+                <Layers size={14} className='text-muted-foreground' />
+                <span className='text-sm font-medium'>平台</span>
+                <span className='text-muted-foreground text-xs font-normal'>
+                  （仅展示已启用的平台）
+                </span>
+              </div>
+              {enabledPlatforms.length === 0 ? (
+                <div className='text-muted-foreground rounded-lg border border-dashed p-3 text-xs'>
+                  暂无已启用平台，请先到"平台管理"启用至少一个。
+                </div>
+              ) : (
+                <div className='grid gap-2 md:grid-cols-4'>
+                  {enabledPlatforms.map((p) => {
+                    const selected = form.platform === p.name
+                    return (
+                      <label
+                        key={p.name}
+                        className={cn(
+                          'cursor-pointer space-y-1 rounded-lg border p-2.5 text-xs transition-all',
+                          selected
+                            ? 'border-primary bg-primary/5 shadow-sm'
+                            : 'hover:border-primary/40 hover:bg-muted/40'
+                        )}
+                      >
+                        <input
+                          type='radio'
+                          name='task-platform'
+                          className='sr-only'
+                          value={p.name}
+                          checked={selected}
+                          onChange={() =>
+                            setForm((f) => ({
+                              ...f,
+                              platform: p.name,
+                              // 名字用默认模板，避免串名；用户手改过则保留
+                              name:
+                                f.name === '' ||
+                                /^[a-z0-9_-]+-task-\d+$/i.test(f.name)
+                                  ? genDefaultName(p.name)
+                                  : f.name,
+                            }))
+                          }
+                        />
+                        <div className='flex items-center gap-1.5'>
+                          <span className='font-semibold'>
+                            {p.display_name}
+                          </span>
+                        </div>
+                        <div className='text-muted-foreground font-mono text-[10px]'>
+                          {p.name}
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 引擎选择（非 grok 平台才显示；grok 只有一套流程） */}
+            {form.platform !== 'grok' && currentEngines.length > 0 && (
+              <div className='space-y-2'>
+                <div className='flex items-center gap-2'>
+                  <Zap size={14} className='text-muted-foreground' />
+                  <span className='text-sm font-medium'>注册引擎</span>
+                  <span className='text-muted-foreground text-xs font-normal'>
+                    （engine_id）
+                  </span>
+                </div>
+                <div className='grid gap-2 md:grid-cols-3'>
+                  {currentEngines.map((e) => {
+                    const selected = form.engine_id === e.id
+                    return (
+                      <label
+                        key={e.id}
+                        className={cn(
+                          'cursor-pointer space-y-1 rounded-lg border p-2.5 text-xs transition-all',
+                          selected
+                            ? 'border-primary bg-primary/5 shadow-sm'
+                            : 'hover:border-primary/40 hover:bg-muted/40'
+                        )}
+                      >
+                        <input
+                          type='radio'
+                          name='task-engine'
+                          className='sr-only'
+                          value={e.id}
+                          checked={selected}
+                          onChange={() =>
+                            setForm((f) => ({ ...f, engine_id: e.id }))
+                          }
+                        />
+                        <div className='flex items-center justify-between gap-1.5'>
+                          <span className='font-semibold'>
+                            {e.display_name}
+                          </span>
+                          {e.is_recommended && (
+                            <Badge variant='secondary' className='text-[9px]'>
+                              推荐
+                            </Badge>
+                          )}
+                          {e.is_deprecated && (
+                            <Badge
+                              variant='outline'
+                              className='border-amber-500/50 text-amber-600 text-[9px]'
+                            >
+                              deprecated
+                            </Badge>
+                          )}
+                        </div>
+                        <div className='text-muted-foreground font-mono text-[10px]'>
+                          {e.id}
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* 执行器选择（单任务覆盖） */}
             <div className='space-y-2'>

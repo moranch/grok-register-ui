@@ -170,6 +170,11 @@ export interface Task {
   finished_at: string
   exit_code: number
   pid: number
+  /** 多平台字段（可能为 undefined，兼容旧后端） */
+  platform?: string
+  executor_type?: string
+  engine_id?: string
+  params?: Record<string, unknown>
 }
 
 export interface TaskConfig {
@@ -380,7 +385,16 @@ export const taskApi = {
   list: () => grokApi.get<{ tasks: Task[] }>('/tasks'),
   get: (id: number) => grokApi.get<{ task: Task }>(`/tasks/${id}`),
   create: (
-    data: Partial<TaskConfig> & { name: string; count: number; notes?: string }
+    data: Partial<TaskConfig> & {
+      name: string
+      count: number
+      notes?: string
+      /** 平台 name，默认 'grok'（对应后端 PLATFORM_REGISTRY 里的 key） */
+      platform?: string
+      /** 非 grok 平台必填：对应该平台的 register_engines.id */
+      engine_id?: string
+      extra?: Record<string, unknown>
+    }
   ) => grokApi.post<{ task: Task }>('/tasks', data),
   stop: (id: number) => grokApi.post(`/tasks/${id}/stop`),
   delete: (id: number) => grokApi.delete(`/tasks/${id}`),
