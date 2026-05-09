@@ -438,13 +438,24 @@ function MailboxesPage() {
                       </div>
 
                       {/* 已配置域名 */}
-                      {m.domain && (
+                      {m.domain ? (
                         <div className='mb-2 flex items-center gap-2 text-xs'>
                           <Globe size={12} className='text-muted-foreground' />
                           <span className='text-muted-foreground'>当前域名</span>
                           <code className='bg-muted rounded px-1.5 py-0.5 font-mono'>
                             {m.domain}
                           </code>
+                        </div>
+                      ) : (
+                        <div className='mb-2 flex items-center gap-2 text-xs'>
+                          <Globe size={12} className='text-muted-foreground' />
+                          <span className='text-muted-foreground'>当前域名</span>
+                          <Badge
+                            variant='outline'
+                            className='text-[10px] font-normal'
+                          >
+                            服务端随机分配
+                          </Badge>
                         </div>
                       )}
 
@@ -660,9 +671,25 @@ function DomainsDialog({
                 {result.message || '没有可用域名'}
               </div>
               <p className='text-muted-foreground mt-2 text-xs leading-relaxed'>
-                系统会依次尝试 <code>/api/domains</code>、<code>/domains</code>、<code>/api/v1/domains</code> 三个端点。
-                如果都失败，说明该 Provider 可能不支持自动发现，需要手动在"编辑"里填写域名。
+                原因可能是：
+                <br />
+                1. 该 Provider 不支持自动发现（没有 <code>/domains</code> 接口）
+                <br />
+                2. 域名列表接口需要 VIP / 特殊权限的 API Key
+                <br />
+                3. 接口返回空数组（服务端没开放任何域名）
               </p>
+              <div className='mt-4 rounded-lg border border-sky-300 bg-sky-50 p-3 text-left text-xs dark:border-sky-500/30 dark:bg-sky-900/10'>
+                <div className='font-medium text-sky-700 dark:text-sky-300'>
+                  💡 解决方案
+                </div>
+                <p className='text-muted-foreground mt-1 leading-relaxed'>
+                  直接把 Provider 的<span className='font-medium'>域名字段留空</span>，
+                  系统会让邮箱服务端<span className='font-medium'>随机分配一个可用域名</span>。
+                  大多数 cloudflare_temp_email 风格的接口都支持这种兜底。
+                  如果你有确定能用的域名，也可以在"编辑"里手动填。
+                </p>
+              </div>
               <Button
                 variant='outline'
                 size='sm'
