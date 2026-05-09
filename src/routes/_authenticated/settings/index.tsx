@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useLocation } from '@tanstack/react-router'
 import {
   Save,
   RefreshCw,
@@ -12,6 +12,7 @@ import {
   Zap,
   EyeOff,
   Eye,
+  Info,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useGrokStore } from '@/stores/grok-store'
@@ -92,6 +93,21 @@ function SettingsPage() {
     fetchSettings()
   }, [fetchSettings])
 
+  // 支持 ?tab=general|proxy|mailbox|token|executor|lifecycle 锚点跳转
+  // 依赖 router 的 search 字符串，query 变化时重新滚动
+  const search = useLocation({ select: (loc) => loc.searchStr })
+  useEffect(() => {
+    const params = new URLSearchParams(search || window.location.search)
+    const tab = params.get('tab')
+    if (!tab) return
+    const target = document.getElementById(`settings-${tab}`)
+    if (target) {
+      setTimeout(() => {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 120)
+    }
+  }, [loadingSettings, search])
+
   useEffect(() => {
     const defaultsNormalized: Partial<SystemSettings> = (() => {
       const d = defaults as Record<string, unknown>
@@ -151,9 +167,9 @@ function SettingsPage() {
   ) => setForm((prev) => ({ ...prev, [key]: value }))
 
   return (
-    <div className='space-y-6 p-6'>
+    <div className='p-6'>
       {/* 标题 */}
-      <div className='flex items-center justify-between'>
+      <div className='mb-6 flex items-center justify-between'>
         <div className='flex items-center gap-3'>
           <SettingsIcon className='text-primary size-6' />
           <div>
@@ -183,9 +199,28 @@ function SettingsPage() {
         </div>
       </div>
 
-      <div className='grid gap-4 lg:grid-cols-2'>
-        {/* 代理 */}
-        <Card>
+      {/* 左侧 sticky 子导航 + 右侧分组卡片 */}
+      <div className='grid gap-6 lg:grid-cols-[180px_1fr]'>
+        <SettingsSubNav />
+        <div className='space-y-4'>
+          {/* 通用 */}
+          <Card id='settings-general' className='scroll-mt-20'>
+            <CardHeader>
+              <CardTitle className='flex items-center gap-2.5 text-base'>
+                <Info className='text-primary size-5' />
+                通用
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className='text-muted-foreground text-sm leading-relaxed'>
+                控制台通用配置入口。左侧 tab 菜单可快速跳转到各分组。
+                保存后配置立即生效，下次启动任务时会读取最新值。
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* 代理 */}
+          <Card id='settings-proxy' className='scroll-mt-20'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2.5 text-base'>
               <Globe className='text-primary size-5' />
@@ -221,7 +256,7 @@ function SettingsPage() {
         </Card>
 
         {/* 临时邮箱 */}
-        <Card>
+        <Card id='settings-mailbox' className='scroll-mt-20'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2.5 text-base'>
               <Mail className='text-primary size-5' />
@@ -274,8 +309,8 @@ function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Token 推送（跨两列） */}
-        <Card className='lg:col-span-2'>
+        {/* Token 推送 */}
+        <Card id='settings-token' className='scroll-mt-20'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2.5 text-base'>
               <Key className='text-primary size-5' />
@@ -328,8 +363,8 @@ function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* 执行器（跨两列） */}
-        <Card className='lg:col-span-2'>
+        {/* 执行器 */}
+        <Card id='settings-executor' className='scroll-mt-20'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2.5 text-base'>
               <Cpu className='text-primary size-5' />
@@ -394,8 +429,8 @@ function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* 生命周期（跨两列） */}
-        <Card className='lg:col-span-2'>
+        {/* 生命周期 */}
+        <Card id='settings-lifecycle' className='scroll-mt-20'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2.5 text-base'>
               <Clock className='text-primary size-5' />
@@ -456,6 +491,7 @@ function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   )
@@ -464,3 +500,98 @@ function SettingsPage() {
 export const Route = createFileRoute('/_authenticated/settings/')({
   component: SettingsPage,
 })
+
+// ======================== 左侧子导航 ========================
+
+const SUBNAV_ITEMS: {
+  key: string
+  label: string
+  icon: React.ElementType
+}[] = [
+  { key: 'general', label: '通用', icon: Info },
+  { key: 'proxy', label: '代理', icon: Globe },
+  { key: 'mailbox', label: '邮箱', icon: Mail },
+  { key: 'token', label: 'Token 推送', icon: Key },
+  { key: 'executor', label: '执行器', icon: Cpu },
+  { key: 'lifecycle', label: '生命周期', icon: Clock },
+]
+
+function SettingsSubNav() {
+  // 根据滚动位置自动高亮当前可见的卡片
+  const [active, setActive] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'general'
+    const params = new URLSearchParams(window.location.search)
+    return params.get('tab') || 'general'
+  })
+
+  useEffect(() => {
+    const ids = SUBNAV_ITEMS.map((s) => `settings-${s.key}`)
+    const elements = ids
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => !!el)
+    if (elements.length === 0) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // 找到当前在视窗上半部的那一个卡片
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
+        if (visible) {
+          const id = visible.target.id.replace('settings-', '')
+          setActive(id)
+        }
+      },
+      {
+        rootMargin: '-100px 0px -55% 0px',
+        threshold: [0, 0.25, 0.5, 1],
+      }
+    )
+
+    elements.forEach((el) => observer.observe(el))
+    return () => observer.disconnect()
+  }, [])
+
+  const jump = (key: string) => {
+    setActive(key)
+    const target = document.getElementById(`settings-${key}`)
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  return (
+    <aside className='lg:sticky lg:top-4 lg:self-start'>
+      <div className='bg-card rounded-lg border p-2'>
+        <div className='text-muted-foreground mb-1 px-2 pt-1 pb-1 text-[11px] font-medium tracking-wider uppercase'>
+          分组
+        </div>
+        <nav className='space-y-0.5'>
+          {SUBNAV_ITEMS.map((item) => {
+            const selected = active === item.key
+            const Icon = item.icon
+            return (
+              <button
+                key={item.key}
+                type='button'
+                onClick={() => jump(item.key)}
+                className={cn(
+                  'relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors',
+                  selected
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                {selected && (
+                  <span className='bg-primary absolute top-1/2 left-0 h-4 w-[2px] -translate-y-1/2 rounded-full' />
+                )}
+                <Icon size={14} className='shrink-0' />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+      </div>
+    </aside>
+  )
+}

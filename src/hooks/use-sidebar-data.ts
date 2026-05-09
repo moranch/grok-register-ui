@@ -13,6 +13,13 @@ import { GrokLogo } from '@/components/grok-logo'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
 import { type SidebarData } from '@/components/layout/types'
 
+/**
+ * 参考 any-auto-register 的菜单布局：
+ *   - 两段式结构：主导航（总览/任务/账号/统计）+ 运维（代理/健康/noVNC）+ 系统（设置）
+ *   - 每个分组都有 title 作为视觉分隔
+ *   - "设置"页内部自带左侧子导航（tab bar），不走 sidebar collapsible 子菜单
+ *     —— 避免 TanStack Router 对 ?query 链接的类型/路由处理问题
+ */
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
 
@@ -28,25 +35,25 @@ export function useSidebarData(): SidebarData {
     navGroups: [
       {
         id: 'main',
-        title: t('控制台'),
+        title: t('主导航'),
         items: [
           {
-            title: t('仪表盘'),
+            title: t('总览'),
             url: '/dashboard',
             icon: LayoutDashboard,
           },
           {
-            title: t('任务管理'),
+            title: t('任务'),
             url: '/tasks',
             icon: ListTodo,
           },
           {
-            title: t('账号管理'),
+            title: t('账号'),
             url: '/accounts',
             icon: Users,
           },
           {
-            title: t('统计分析'),
+            title: t('统计'),
             url: '/stats',
             icon: BarChart3,
           },
@@ -71,8 +78,14 @@ export function useSidebarData(): SidebarData {
             url: '/novnc',
             icon: Monitor,
           },
+        ],
+      },
+      {
+        id: 'system',
+        title: t('系统'),
+        items: [
           {
-            title: t('系统配置'),
+            title: t('设置'),
             url: '/settings',
             icon: Settings,
           },
