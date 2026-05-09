@@ -103,6 +103,45 @@ export interface SystemSettings {
   lifecycle_enabled: boolean
   /** 有效性检测间隔，单位小时 */
   lifecycle_check_hours: number
+
+  // 注册策略
+  round_interval_sec: number
+  round_timeout_sec: number
+  max_concurrent_tasks: number
+  circuit_break_fail_threshold: number
+
+  // 验证码
+  captcha_provider: string
+  captcha_api_key: string
+
+  // 高级
+  log_level: string
+  collect_error_samples: boolean
+}
+
+// 系统信息
+export interface SystemInfo {
+  app_name: string
+  app_version: string
+  python_version: string
+  platform: string
+  source_project: string
+  python_path: string
+  runtime_dir: string
+  tasks_dir: string
+  db_path: string
+  db_size_bytes: number
+  tasks_size_bytes: number
+  auth_required: boolean
+  max_concurrent_tasks: number
+  webui_dir: string
+  counts: {
+    tasks: number
+    events: number
+    accounts: number
+    proxies: number
+    mailboxes: number
+  }
 }
 
 // ---- 代理池 ----
@@ -301,6 +340,25 @@ export const metaApi = {
       python_path: string
       max_concurrent_tasks: number
     }>('/meta'),
+}
+
+export const systemApi = {
+  info: () => grokApi.get<SystemInfo>('/system/info'),
+  cleanup: (
+    target: 'events' | 'finished_tasks' | 'all_tasks' | 'accounts',
+    days = 30
+  ) =>
+    grokApi.post<{ ok: boolean; target: string; deleted: number }>(
+      '/system/cleanup',
+      null,
+      { params: { target, days } }
+    ),
+  exportConfigUrl: () => '/api/system/export-config',
+  importConfig: (payload: unknown) =>
+    grokApi.post<{
+      ok: boolean
+      imported: { settings: boolean; proxies: number; mailboxes: number }
+    }>('/system/import-config', payload),
 }
 
 export default grokApi
