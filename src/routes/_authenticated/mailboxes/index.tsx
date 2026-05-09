@@ -350,7 +350,7 @@ function MailboxesPage() {
             ) : (
               <div className='space-y-3'>
                 {mailboxes.map((m) => {
-                  const isActive = activeId === m.id
+                  const isActive = editingId === m.id
                   return (
                     <div
                       key={m.id}
