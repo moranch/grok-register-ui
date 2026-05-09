@@ -13,6 +13,7 @@ import {
   XCircle,
   RefreshCw,
   ListTodo,
+  Bug,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Task } from '@/lib/grok-api'
@@ -31,6 +32,7 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 
 const RUNNING_STATES = ['queued', 'running', 'stopping']
 
@@ -48,7 +50,19 @@ function TasksPage() {
 
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ name: '', count: 50, notes: '' })
+  const [form, setForm] = useState<{
+    name: string
+    count: number
+    notes: string
+    debug_mode: boolean
+    debug_override: boolean
+  }>({
+    name: '',
+    count: 50,
+    notes: '',
+    debug_mode: false,
+    debug_override: false,
+  })
   const [creating, setCreating] = useState(false)
 
   // 生成默认任务名：grok-task-<YYYYMMDDHHmmss>（本地时间，更易读）
@@ -67,7 +81,13 @@ function TasksPage() {
 
   // 打开新建表单时自动填一个默认任务名
   const openCreateForm = () => {
-    setForm({ name: genDefaultName(), count: 50, notes: '' })
+    setForm({
+      name: genDefaultName(),
+      count: 50,
+      notes: '',
+      debug_mode: false,
+      debug_override: false,
+    })
     setShowCreate(true)
   }
 
@@ -95,10 +115,19 @@ function TasksPage() {
         name: finalName,
         count: form.count,
         notes: form.notes,
+        // 只在用户显式勾选"覆盖系统默认"时，才把 debug_mode 传给后端
+        // 否则后端会沿用系统配置页里的全局设置
+        ...(form.debug_override ? { debug_mode: form.debug_mode } : {}),
       })
       toast.success('任务创建成功')
       setShowCreate(false)
-      setForm({ name: '', count: 50, notes: '' })
+      setForm({
+        name: '',
+        count: 50,
+        notes: '',
+        debug_mode: false,
+        debug_override: false,
+      })
     } catch {
       toast.error('任务创建失败')
     } finally {
@@ -240,6 +269,56 @@ function TasksPage() {
                 />
               </div>
             </div>
+
+            {/* 调试模式单任务覆盖 */}
+            <div
+              className={cn(
+                'flex items-start justify-between gap-4 rounded-lg border p-3 transition-colors',
+                form.debug_override
+                  ? 'border-amber-400/60 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-900/10'
+                  : 'bg-muted/30'
+              )}
+            >
+              <div className='space-y-1.5'>
+                <div className='flex items-center gap-2'>
+                  <Bug size={14} className='text-muted-foreground' />
+                  <span className='text-sm font-medium'>
+                    覆盖系统默认的调试模式
+                  </span>
+                </div>
+                <p className='text-muted-foreground text-xs leading-relaxed'>
+                  默认跟随系统配置页里的设置。勾选后可针对本任务单独切换：
+                  {form.debug_override
+                    ? form.debug_mode
+                      ? '浏览器"有头"运行（Xvfb）'
+                      : '浏览器完全无头运行'
+                    : '使用系统默认'}
+                </p>
+              </div>
+              <div className='flex items-center gap-3'>
+                <Switch
+                  checked={form.debug_override}
+                  onCheckedChange={(v: boolean) =>
+                    setForm({ ...form, debug_override: v })
+                  }
+                />
+                {form.debug_override && (
+                  <div className='flex items-center gap-1.5 rounded-md border px-2 py-1'>
+                    <span className='text-muted-foreground text-[11px]'>
+                      调试
+                    </span>
+                    <Switch
+                      size='sm'
+                      checked={form.debug_mode}
+                      onCheckedChange={(v: boolean) =>
+                        setForm({ ...form, debug_mode: v })
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
             <Button onClick={handleCreate} disabled={creating}>
               {creating ? (
                 <Loader2 size={16} className='animate-spin' />

@@ -70,6 +70,8 @@ export interface TaskConfig {
     token: string
     append: boolean
   }
+  /** 调试模式：true=浏览器"有头"运行（Xvfb），false=无头 */
+  debug_mode?: boolean
 }
 
 export interface HealthItem {
@@ -92,6 +94,8 @@ export interface SystemSettings {
   api_endpoint: string
   api_token: string
   api_append: boolean
+  /** 调试模式：默认 false（无头）；开启后浏览器以"有头"方式运行（需要 Xvfb） */
+  debug_mode: boolean
 }
 
 // ==================== API ====================

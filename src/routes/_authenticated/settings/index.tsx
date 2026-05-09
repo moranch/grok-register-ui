@@ -7,6 +7,7 @@ import {
   Globe,
   Mail,
   Key,
+  Bug,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useGrokStore } from '@/stores/grok-store'
@@ -21,6 +22,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 
 const EMPTY_SETTINGS: SystemSettings = {
   proxy: '',
@@ -32,6 +34,7 @@ const EMPTY_SETTINGS: SystemSettings = {
   api_endpoint: '',
   api_token: '',
   api_append: true,
+  debug_mode: false,
 }
 
 function SettingsPage() {
@@ -71,6 +74,7 @@ function SettingsPage() {
         api_endpoint: typeof api?.endpoint === 'string' ? api.endpoint : '',
         api_token: typeof api?.token === 'string' ? api.token : '',
         api_append: typeof api?.append === 'boolean' ? api.append : true,
+        debug_mode: typeof d?.debug_mode === 'boolean' ? d.debug_mode : false,
       }
     })()
 
@@ -273,6 +277,50 @@ function SettingsPage() {
                 </p>
               </div>
             </label>
+          </CardContent>
+        </Card>
+
+        {/* 调试模式开关（跨两列） */}
+        <Card className='lg:col-span-2'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2.5 text-base'>
+              <Bug className='text-primary size-5' />
+              运行模式
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className={`flex items-start justify-between gap-4 rounded-lg border p-4 transition-colors ${
+                form.debug_mode
+                  ? 'border-amber-400/60 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-900/10'
+                  : 'bg-muted/30'
+              }`}
+            >
+              <div className='space-y-1.5'>
+                <div className='flex items-center gap-2'>
+                  <span className='text-sm font-semibold'>调试模式</span>
+                  {form.debug_mode ? (
+                    <span className='rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300'>
+                      已开启
+                    </span>
+                  ) : (
+                    <span className='text-muted-foreground rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium'>
+                      生产模式
+                    </span>
+                  )}
+                </div>
+                <p className='text-muted-foreground text-xs leading-relaxed'>
+                  关闭（默认）：浏览器以 <code>--headless=new</code> 完全无头运行，占用最低，推荐生产使用。
+                  <br />
+                  开启：启用 Xvfb 虚拟显示器，浏览器以"有头"方式运行，便于排查反爬拦截或 Turnstile
+                  异常；资源开销更大，仅在调试时开启。
+                </p>
+              </div>
+              <Switch
+                checked={form.debug_mode}
+                onCheckedChange={(v: boolean) => update('debug_mode', v)}
+              />
+            </div>
           </CardContent>
         </Card>
       </div>
