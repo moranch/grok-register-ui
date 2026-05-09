@@ -84,14 +84,10 @@ export function mapStatusDataToConfig(
 }
 
 // Fetch system config from API
+// 注：Grok Register Console 后端没有 `/api/status`，直接返回空对象，
+// 让系统使用 DEFAULT_SYSTEM_NAME / DEFAULT_LOGO 等默认值。
 async function fetchSystemConfig(): Promise<Partial<SystemConfig>> {
-  const response = await fetch('/api/status')
-  if (!response.ok) throw new Error('Failed to fetch status')
-
-  const data: StatusApiResponse = await response.json()
-  if (!data.success) throw new Error('API returned error')
-
-  return mapStatusDataToConfig(data.data)
+  return {}
 }
 
 // Preload image and return cleanup function

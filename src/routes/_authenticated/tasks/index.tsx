@@ -20,7 +20,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { taskApi, type Task } from '@/lib/grok-api'
+import { taskApi, type Task } from '@/lib/api'
 import { useGrokStore } from '@/stores/grok-store'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'

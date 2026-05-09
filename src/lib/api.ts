@@ -1,30 +1,31 @@
+/**
+ * Grok Register Console - 统一 API 客户端
+ *
+ * 本文件合并了旧 grok-api.ts 与 api.ts 的能力：
+ * - `api`: 通用 axios 实例（同源请求 + 去重 + 全局错误提示）
+ * - `grokApi`: 带 Bearer 认证的 console 专用实例（baseURL=/api）
+ * - 全部业务 API（tasks / accounts / proxies / mailboxes / platforms / ...）
+ */
 import axios from 'axios'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 
 // ============================================================================
-// Axios Instance Configuration
+// 通用 axios 实例：用于非 console 后端（保留给前端模板层）
 // ============================================================================
 
-// Base URL: empty string for same-origin API requests
 const baseURL = ''
 
-// Create axios instance with default config
 export const api = axios.create({
   baseURL,
-  withCredentials: true, // Include cookies in cross-origin requests
+  withCredentials: true,
   headers: {
-    'Cache-Control': 'no-store', // Prevent caching
+    'Cache-Control': 'no-store',
   },
 })
 
-// ============================================================================
-// Request Deduplication
-// ============================================================================
-
-// Deduplicate concurrent GET requests to the same URL
-// Prevents multiple identical requests from being sent simultaneously
+// GET 请求去重
 const inFlightGet = new Map<string, Promise<unknown>>()
 const originalGet = api.get.bind(api)
 
@@ -38,37 +39,24 @@ api.get = ((url: string, config = {}) => {
     : '{}'
   const key = `${url}?${params}`
 
-  // Return existing in-flight request if available
   if (inFlightGet.has(key)) return inFlightGet.get(key)!
-
-  // Create new request and clean up after completion
   const req = originalGet(url, config).finally(() => inFlightGet.delete(key))
   inFlightGet.set(key, req)
   return req
 }) as typeof api.get
 
-// ============================================================================
-// Response Interceptor
-// ============================================================================
-
-// Handle business logic errors and HTTP errors globally
 api.interceptors.response.use(
   (response) => {
     const skipBusiness = (response.config as unknown as Record<string, unknown>)
       ?.skipBusinessError
-
-    // Unified business response format: { success, message, data }
     if (
       !skipBusiness &&
       response &&
       response.data &&
-      typeof response.data.success === 'boolean'
+      typeof response.data.success === 'boolean' &&
+      !response.data.success
     ) {
-      if (!response.data.success) {
-        // Show error toast for business failures
-        const msg = response.data.message || 'Request failed'
-        toast.error(msg)
-      }
+      toast.error(response.data.message || 'Request failed')
     }
     return response
   },
@@ -76,9 +64,7 @@ api.interceptors.response.use(
     const skip = error?.config?.skipErrorHandler
     if (!skip) {
       const status = error?.response?.status
-
       if (status === 401) {
-        // Unauthorized: clear auth state and show toast
         toast.error(i18next.t('Session expired!'))
         try {
           useAuthStore.getState().auth.reset()
@@ -86,7 +72,6 @@ api.interceptors.response.use(
           /* empty */
         }
       } else {
-        // Other errors: show error message from response or default
         const msg =
           error?.response?.data?.message || error?.message || 'Request error'
         toast.error(msg)
@@ -96,13 +81,6 @@ api.interceptors.response.use(
   }
 )
 
-// ============================================================================
-// Common Headers Utility
-// ============================================================================
-
-/**
- * Get user ID from localStorage
- */
 function getUserId(): string | null {
   try {
     if (typeof window !== 'undefined') {
@@ -114,123 +92,489 @@ function getUserId(): string | null {
   return null
 }
 
-/**
- * Get common request headers (for both axios and SSE requests)
- */
 export function getCommonHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const uid = getUserId()
-  if (uid) {
-    headers['New-Api-User'] = uid
-  }
-
+  if (uid) headers['New-Api-User'] = uid
   return headers
 }
 
-// ============================================================================
-// Request Interceptor
-// ============================================================================
-
-// Attach user ID header for all requests
 api.interceptors.request.use((config) => {
   const uid = getUserId()
   if (uid) {
-    // Custom header for user identification
     ;(config.headers as Record<string, string>)['New-Api-User'] = uid
   }
   return config
 })
 
 // ============================================================================
-// Common API Functions
+// grokApi：Console 专用实例（Bearer 认证 + 401 自动跳登录）
 // ============================================================================
 
-// ----------------------------------------------------------------------------
-// User APIs
-// ----------------------------------------------------------------------------
+const grokApi = axios.create({
+  baseURL: '/api',
+  timeout: 30000,
+})
 
-// Get current user info
-export async function getSelf() {
-  const res = await api.get('/api/user/self', {
-    // Avoid global 401 toast during guards/preloads
-    skipErrorHandler: true,
-  } as Record<string, unknown>)
-  return res.data
+grokApi.interceptors.request.use((config) => {
+  const password =
+    typeof window !== 'undefined'
+      ? window.localStorage.getItem('console_password')
+      : null
+  if (password) {
+    config.headers.Authorization = `Bearer ${password}`
+  }
+  return config
+})
+
+grokApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      try {
+        window.localStorage.removeItem('console_password')
+      } catch {
+        /* empty */
+      }
+      if (
+        typeof window !== 'undefined' &&
+        !window.location.pathname.startsWith('/sign-in')
+      ) {
+        window.location.href = '/sign-in'
+      }
+    }
+    return Promise.reject(error)
+  }
+)
+
+// ============================================================================
+// 业务类型定义
+// ============================================================================
+
+export interface Task {
+  id: number
+  name: string
+  status: string
+  target_count: number
+  completed_count: number
+  failed_count: number
+  current_round: number
+  current_phase: string
+  last_email: string
+  last_error: string
+  last_log_at: string
+  notes: string
+  config: TaskConfig
+  created_at: string
+  started_at: string
+  finished_at: string
+  exit_code: number
+  pid: number
 }
 
-// Get user available models
-export async function getUserModels(): Promise<{
-  success: boolean
+export interface TaskConfig {
+  run: { count: number }
+  proxy: string
+  browser_proxy: string
+  temp_mail_api_base: string
+  temp_mail_admin_password: string
+  temp_mail_domain: string
+  temp_mail_site_password: string
+  api: { endpoint: string; token: string; append: boolean }
+  debug_mode?: boolean
+  executor?: string
+}
+
+export interface HealthItem {
+  key: string
+  label: string
+  ok: boolean
+  summary: string
+  detail: string
+  target: string
+  checked_at: string
+}
+
+export interface SystemSettings {
+  proxy: string
+  browser_proxy: string
+  temp_mail_api_base: string
+  temp_mail_admin_password: string
+  temp_mail_domain: string
+  temp_mail_site_password: string
+  api_endpoint: string
+  api_token: string
+  api_append: boolean
+  debug_mode: boolean
+  executor: string
+  lifecycle_enabled: boolean
+  lifecycle_check_hours: number
+  round_interval_sec: number
+  round_timeout_sec: number
+  max_concurrent_tasks: number
+  circuit_break_fail_threshold: number
+  captcha_provider: string
+  captcha_api_key: string
+  log_level: string
+  collect_error_samples: boolean
+}
+
+export interface SystemInfo {
+  app_name: string
+  app_version: string
+  python_version: string
+  platform: string
+  source_project: string
+  python_path: string
+  runtime_dir: string
+  tasks_dir: string
+  db_path: string
+  db_size_bytes: number
+  tasks_size_bytes: number
+  auth_required: boolean
+  max_concurrent_tasks: number
+  webui_dir: string
+  counts: {
+    tasks: number
+    events: number
+    accounts: number
+    proxies: number
+    mailboxes: number
+  }
+}
+
+export interface ProxyEntry {
+  id: number
+  url: string
+  label: string
+  enabled: boolean
+  success_count: number
+  failure_count: number
+  consecutive_failures: number
+  success_rate: number
+  last_used_at: string
+  created_at: string
+}
+
+export type MailboxProviderType = 'tmail' | 'duckmail' | 'moemail' | 'custom'
+
+export interface MailboxEntry {
+  id: number
+  name: string
+  provider_type: MailboxProviderType
+  api_base: string
+  admin_password: string
+  domain: string
+  site_password: string
+  enabled: boolean
+  success_count: number
+  failure_count: number
+  consecutive_failures: number
+  success_rate: number
+  last_used_at: string
+  created_at: string
+}
+
+export type AccountLifecycle =
+  | 'registered'
+  | 'trial'
+  | 'subscribed'
+  | 'expired'
+  | 'invalid'
+export type AccountPlanState = 'free' | 'trial' | 'pro' | 'team' | 'unknown'
+export type AccountValidity = 'valid' | 'invalid' | 'unknown'
+
+export interface AccountEntry {
+  id: number
+  email: string
+  sso: string
+  password: string
+  task_id: number | null
+  proxy_url: string
+  status: string
+  lifecycle_status: AccountLifecycle
+  plan_state: AccountPlanState
+  validity_status: AccountValidity
+  last_error: string
+  last_checked_at: string
+  notes: string
+  created_at: string
+}
+
+export interface AccountAssetSummary {
+  total: number
+  lifecycle_status: Record<string, number>
+  plan_state: Record<string, number>
+  validity_status: Record<string, number>
+}
+
+export interface StatsOverview {
+  total_events: number
+  success_count: number
+  failure_count: number
+  success_rate: number
+  account_count: number
+  trend: { day: string; ok: number; fail: number }[]
+}
+
+export interface StatsErrorItem {
+  kind: string
+  count: number
+  sample: string
+}
+
+export interface StatsByProxyItem {
+  proxy_url: string
+  ok: number
+  fail: number
+  total: number
+  success_rate: number
+}
+
+export interface LifecycleStatus {
+  enabled: boolean
+  check_hours: number
+  last_check_at: string
+  last_refresh_at: string
+  last_result: string
+  running: boolean
+}
+
+// ---- 平台（多平台注册器新增） ----
+
+export interface PlatformRegisterEngine {
+  id: string
+  display_name: string
+  is_recommended?: boolean
+  is_deprecated?: boolean
+}
+
+export interface Platform {
+  name: string
+  display_name: string
+  enabled: boolean
+  executor_type?: string
+  supported_executors?: string[]
+  capabilities?: string[]
+  register_engines?: PlatformRegisterEngine[]
+  config?: Record<string, unknown>
+  config_schema?: Record<string, unknown>
+  extra_schema?: Record<string, unknown>
+}
+
+export interface PlatformListResponse {
+  platforms: Platform[]
+}
+
+export interface PlatformTestRunResult {
+  ok: boolean
   message?: string
-  data?: string[]
-}> {
-  const res = await api.get('/api/user/models')
-  return res.data
+  [key: string]: unknown
 }
 
-// Get user groups with descriptions and ratios
-export async function getUserGroups(): Promise<{
-  success: boolean
-  message?: string
-  data?: Record<string, { desc: string; ratio: number | string }>
-}> {
-  const res = await api.get('/api/user/self/groups')
-  return res.data
+// ============================================================================
+// 业务 API（全部走带 Bearer 认证的 grokApi 实例）
+// ============================================================================
+
+export const taskApi = {
+  list: () => grokApi.get<{ tasks: Task[] }>('/tasks'),
+  get: (id: number) => grokApi.get<{ task: Task }>(`/tasks/${id}`),
+  create: (
+    data: Partial<TaskConfig> & { name: string; count: number; notes?: string }
+  ) => grokApi.post<{ task: Task }>('/tasks', data),
+  stop: (id: number) => grokApi.post(`/tasks/${id}/stop`),
+  delete: (id: number) => grokApi.delete(`/tasks/${id}`),
+  logs: (id: number, limit = 250) =>
+    grokApi.get<{ lines: string[] }>(`/tasks/${id}/logs`, {
+      params: { limit },
+    }),
+  streamUrl: (id: number) => `/api/tasks/${id}/stream`,
 }
 
-// ----------------------------------------------------------------------------
-// System APIs
-// ----------------------------------------------------------------------------
-
-// Get system status
-export async function getStatus() {
-  const res = await api.get('/api/status')
-  return res.data?.data as Record<string, unknown>
+export const settingsApi = {
+  get: () =>
+    grokApi.get<{
+      settings: SystemSettings
+      defaults: Record<string, unknown>
+    }>('/settings'),
+  save: (data: SystemSettings) =>
+    grokApi.post<{ settings: SystemSettings }>('/settings', data),
 }
 
-// Get system notice
-export async function getNotice(): Promise<{
-  success: boolean
-  message?: string
-  data?: string
-}> {
-  const res = await api.get('/api/notice')
-  return res.data
+export const healthApi = {
+  check: () =>
+    grokApi.get<{ items: HealthItem[]; checked_at: string }>('/health'),
 }
 
-// ----------------------------------------------------------------------------
-// 2FA Management APIs
-// ----------------------------------------------------------------------------
-
-// Get 2FA status
-export async function get2FAStatus() {
-  const res = await api.get('/api/user/2fa/status')
-  return res.data
+export const proxyApi = {
+  list: () => grokApi.get<{ proxies: ProxyEntry[] }>('/proxies'),
+  add: (data: { url: string; label?: string; enabled?: boolean }) =>
+    grokApi.post<{ proxy: ProxyEntry }>('/proxies', data),
+  update: (
+    id: number,
+    data: { label?: string; enabled?: boolean; reset_stats?: boolean }
+  ) => grokApi.patch<{ proxy: ProxyEntry }>(`/proxies/${id}`, data),
+  delete: (id: number) => grokApi.delete(`/proxies/${id}`),
 }
 
-// Setup 2FA
-export async function setup2FA() {
-  const res = await api.post('/api/user/2fa/setup')
-  return res.data
+export const mailboxApi = {
+  list: () => grokApi.get<{ mailboxes: MailboxEntry[] }>('/mailboxes'),
+  add: (data: {
+    name: string
+    provider_type: MailboxProviderType
+    api_base: string
+    admin_password?: string
+    domain?: string
+    site_password?: string
+    enabled?: boolean
+  }) => grokApi.post<{ mailbox: MailboxEntry }>('/mailboxes', data),
+  update: (
+    id: number,
+    data: Partial<{
+      name: string
+      provider_type: MailboxProviderType
+      api_base: string
+      admin_password: string
+      domain: string
+      site_password: string
+      enabled: boolean
+      reset_stats: boolean
+    }>
+  ) => grokApi.patch<{ mailbox: MailboxEntry }>(`/mailboxes/${id}`, data),
+  delete: (id: number) => grokApi.delete(`/mailboxes/${id}`),
+  test: (id: number) =>
+    grokApi.post<{
+      ok: boolean
+      status_code?: number
+      message: string
+      checked_at: string
+    }>(`/mailboxes/${id}/test`),
+  domains: (id: number) =>
+    grokApi.get<{
+      ok: boolean
+      items: string[]
+      endpoint?: string
+      message?: string
+      checked_at: string
+    }>(`/mailboxes/${id}/domains`),
+  importDefault: (force = false) =>
+    grokApi.post<{
+      ok: boolean
+      skipped?: boolean
+      message?: string
+      mailbox?: MailboxEntry
+    }>('/mailboxes/import-default', null, { params: { force } }),
 }
 
-// Enable 2FA with verification code
-export async function enable2FA(code: string) {
-  const res = await api.post('/api/user/2fa/enable', { code })
-  return res.data
+export const accountApi = {
+  list: (limit = 500) =>
+    grokApi.get<{ items: AccountEntry[] }>('/accounts', { params: { limit } }),
+  summary: () => grokApi.get<AccountAssetSummary>('/accounts/summary'),
+  update: (
+    id: number,
+    data: Partial<{
+      lifecycle_status: AccountLifecycle
+      plan_state: AccountPlanState
+      validity_status: AccountValidity
+      notes: string
+      last_error: string
+    }>
+  ) => grokApi.patch<{ account: AccountEntry }>(`/accounts/${id}`, data),
+  delete: (id: number) => grokApi.delete(`/accounts/${id}`),
+  exportUrl: (fmt: 'json' | 'csv' | 'sso') => `/api/accounts/export?fmt=${fmt}`,
 }
 
-// Disable 2FA with verification code
-export async function disable2FA(code: string) {
-  const res = await api.post('/api/user/2fa/disable', { code })
-  return res.data
+export const statsApi = {
+  overview: (days = 7) =>
+    grokApi.get<StatsOverview>('/stats/overview', { params: { days } }),
+  errors: (days = 7) =>
+    grokApi.get<{ items: StatsErrorItem[] }>('/stats/errors', {
+      params: { days },
+    }),
+  byProxy: () => grokApi.get<{ items: StatsByProxyItem[] }>('/stats/by-proxy'),
 }
 
-// Regenerate 2FA backup codes
-export async function regenerate2FABackupCodes(code: string) {
-  const res = await api.post('/api/user/2fa/backup_codes', { code })
-  return res.data
+export const lifecycleApi = {
+  status: () => grokApi.get<LifecycleStatus>('/lifecycle/status'),
+  check: () =>
+    grokApi.post<{
+      ok: boolean
+      message: string
+      endpoint?: string
+      checked_at: string
+    }>('/lifecycle/check'),
+  toggle: (enabled?: boolean) =>
+    grokApi.post<{
+      enabled: boolean
+      check_hours: number
+      changed_at: string
+    }>('/lifecycle/toggle', { enabled }),
 }
+
+export const metaApi = {
+  get: () =>
+    grokApi.get<{
+      defaults: Record<string, unknown>
+      settings: SystemSettings
+      source_project: string
+      python_path: string
+      max_concurrent_tasks: number
+    }>('/meta'),
+}
+
+export const systemApi = {
+  info: () => grokApi.get<SystemInfo>('/system/info'),
+  cleanup: (
+    target: 'events' | 'finished_tasks' | 'all_tasks' | 'accounts',
+    days = 30
+  ) =>
+    grokApi.post<{ ok: boolean; target: string; deleted: number }>(
+      '/system/cleanup',
+      null,
+      { params: { target, days } }
+    ),
+  exportConfigUrl: () => '/api/system/export-config',
+  importConfig: (payload: unknown) =>
+    grokApi.post<{
+      ok: boolean
+      imported: { settings: boolean; proxies: number; mailboxes: number }
+    }>('/system/import-config', payload),
+}
+
+export const platformApi = {
+  list: async (): Promise<PlatformListResponse> => {
+    const res = await grokApi.get('/platforms/')
+    const data = res.data
+    if (Array.isArray(data)) return { platforms: data as Platform[] }
+    if (Array.isArray(data?.platforms)) return data as PlatformListResponse
+    return { platforms: [] }
+  },
+  detail: async (name: string): Promise<Platform> => {
+    const res = await grokApi.get<Platform>(
+      `/platforms/${encodeURIComponent(name)}`
+    )
+    return res.data
+  },
+  updateConfig: async (
+    name: string,
+    config: Record<string, unknown>
+  ): Promise<Platform> => {
+    const res = await grokApi.patch<Platform>(
+      `/platforms/${encodeURIComponent(name)}/config`,
+      config
+    )
+    return res.data
+  },
+  testRun: async (
+    name: string,
+    params: Record<string, unknown> = {}
+  ): Promise<PlatformTestRunResult> => {
+    const res = await grokApi.post<PlatformTestRunResult>(
+      `/platforms/${encodeURIComponent(name)}/test-run`,
+      params
+    )
+    return res.data
+  },
+}
+
+export default grokApi

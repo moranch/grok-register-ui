@@ -23,7 +23,7 @@ import {
   type StatsErrorItem,
   type StatsByProxyItem,
   type LifecycleStatus,
-} from '@/lib/grok-api'
+} from '@/lib/api'
 
 interface GrokState {
   // Tasks

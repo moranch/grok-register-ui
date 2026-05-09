@@ -10,7 +10,6 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { getStatus } from '@/lib/api'
 import '@/lib/dayjs'
 import { applyFaviconToDom } from '@/lib/dom-utils'
 import { handleServerError } from '@/lib/handle-server-error'
@@ -113,22 +112,8 @@ const rootElement = document.getElementById('root')!
     } catch {
       /* empty */
     }
-    // Background refresh
-    getStatus()
-      .then((s) => {
-        if (s?.system_name) {
-          apply(s.system_name as string)
-          try {
-            localStorage.setItem('status', JSON.stringify(s))
-          } catch {
-            /* empty */
-          }
-        }
-        if (s?.logo) applyFaviconToDom(s.logo as string)
-      })
-      .catch(() => {
-        /* empty */
-      })
+    // Background refresh：后端不提供 /api/status（那是前端模板自带端点），
+    // 直接复用 cache-first 结果即可，不再发起网络请求。
   } catch {
     /* empty */
   }

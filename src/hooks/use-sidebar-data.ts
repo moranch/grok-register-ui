@@ -8,6 +8,7 @@ import {
   BarChart3,
   Monitor,
   Mail,
+  Boxes,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { GrokLogo } from '@/components/grok-logo'
@@ -47,6 +48,11 @@ export function useSidebarData(): SidebarData {
             title: t('任务'),
             url: '/tasks',
             icon: ListTodo,
+          },
+          {
+            title: t('平台管理'),
+            url: '/platforms',
+            icon: Boxes,
           },
           {
             title: t('账户资产'),

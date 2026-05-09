@@ -36,7 +36,7 @@ import {
   type AccountLifecycle,
   type AccountPlanState,
   type AccountValidity,
-} from '@/lib/grok-api'
+} from '@/lib/api'
 import { formatBackendTime } from '@/lib/grok-time'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'

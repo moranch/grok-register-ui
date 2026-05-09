@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import grokApi from '@/lib/grok-api'
+import grokApi from '@/lib/api'
 import { AuthenticatedLayout } from '@/components/layout'
 
 // 仅首次会话校验一次，避免每次路由切换都打后端

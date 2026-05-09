@@ -20,8 +20,8 @@ import { useGrokStore } from '@/stores/grok-store'
 import type {
   MailboxEntry,
   MailboxProviderType,
-} from '@/lib/grok-api'
-import { mailboxApi } from '@/lib/grok-api'
+} from '@/lib/api'
+import { mailboxApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

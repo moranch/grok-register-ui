@@ -46,7 +46,7 @@ import {
   systemApi,
   type SystemSettings,
   type SystemInfo,
-} from '@/lib/grok-api'
+} from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
