@@ -513,6 +513,7 @@ export const accountApi = {
     }>
   ) => grokApi.patch<{ account: AccountEntry }>(`/accounts/${id}`, data),
   delete: (id: number) => grokApi.delete(`/accounts/${id}`),
+  queryState: (id: number) => grokApi.post<{ ok: boolean; data?: Record<string, unknown>; error?: string; plan_state?: string; validity_status?: string }>(`/accounts/${id}/query-state`),
   exportUrl: (fmt: 'json' | 'csv' | 'sso') => `/api/accounts/export?fmt=${fmt}`,
 }
 

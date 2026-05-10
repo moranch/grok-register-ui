@@ -457,6 +457,28 @@ function AccountsPage() {
                             variant='outline'
                             size='icon'
                             className='h-7 w-7'
+                            onClick={async () => {
+                              try {
+                                const { data } = await accountApi.queryState(a.id)
+                                if (data.ok) {
+                                  toast.success(`状态已更新: ${data.plan_state || '-'}`)
+                                  fetchAccounts(2000)
+                                  fetchAccountSummary()
+                                } else {
+                                  toast.error(data.error || '查询失败')
+                                }
+                              } catch {
+                                toast.error('查询状态失败')
+                              }
+                            }}
+                            title='查询状态'
+                          >
+                            <RefreshCw size={12} />
+                          </Button>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-7 w-7'
                             onClick={() => setEditing(a)}
                             title='编辑'
                           >
