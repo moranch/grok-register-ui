@@ -132,6 +132,21 @@ const VALIDITY_OPTIONS: {
   },
 ]
 
+// 平台徽章配色（与 /platforms 页保持一致风格）
+const PLATFORM_BADGE: Record<string, { label: string; color: string }> = {
+  grok: { label: 'Grok', color: 'bg-violet-500/15 text-violet-700 dark:text-violet-400 border-violet-500/30' },
+  windsurf: { label: 'Windsurf', color: 'bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30' },
+  cursor: { label: 'Cursor', color: 'bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border-zinc-500/30' },
+  kiro: { label: 'Kiro', color: 'bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30' },
+  chatgpt: { label: 'ChatGPT', color: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' },
+  anything: { label: 'Anything', color: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30' },
+  blink: { label: 'Blink', color: 'bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-400 border-fuchsia-500/30' },
+  cerebras: { label: 'Cerebras', color: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30' },
+  openblocklabs: { label: 'OpenBlockLabs', color: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30' },
+  tavily: { label: 'Tavily', color: 'bg-teal-500/15 text-teal-700 dark:text-teal-400 border-teal-500/30' },
+  trae: { label: 'Trae', color: 'bg-lime-500/15 text-lime-700 dark:text-lime-400 border-lime-500/30' },
+}
+
 // ============== 主组件 ==============
 
 function AccountsPage() {
@@ -146,6 +161,7 @@ function AccountsPage() {
   } = useGrokStore()
 
   const [search, setSearch] = useState('')
+  const [filterPlatform, setFilterPlatform] = useState<string>('')
   const [filterLifecycle, setFilterLifecycle] = useState<string>('')
   const [filterPlan, setFilterPlan] = useState<string>('')
   const [filterValidity, setFilterValidity] = useState<string>('')
@@ -156,9 +172,19 @@ function AccountsPage() {
     fetchAccountSummary()
   }, [fetchAccounts, fetchAccountSummary])
 
+  // 当前账户列表里出现过的所有平台 — 用于筛选下拉
+  const availablePlatforms = useMemo(() => {
+    const set = new Set<string>()
+    accounts.forEach((a) => {
+      if (a.platform) set.add(a.platform)
+    })
+    return Array.from(set).sort()
+  }, [accounts])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return accounts.filter((a) => {
+      if (filterPlatform && a.platform !== filterPlatform) return false
       if (filterLifecycle && a.lifecycle_status !== filterLifecycle) return false
       if (filterPlan && a.plan_state !== filterPlan) return false
       if (filterValidity && a.validity_status !== filterValidity) return false
@@ -166,11 +192,12 @@ function AccountsPage() {
       return (
         a.email.toLowerCase().includes(q) ||
         a.sso.toLowerCase().includes(q) ||
+        (a.platform || '').toLowerCase().includes(q) ||
         (a.proxy_url || '').toLowerCase().includes(q) ||
         (a.notes || '').toLowerCase().includes(q)
       )
     })
-  }, [accounts, search, filterLifecycle, filterPlan, filterValidity])
+  }, [accounts, search, filterPlatform, filterLifecycle, filterPlan, filterValidity])
 
   const openExport = (fmt: 'json' | 'csv' | 'sso') => {
     const pw = localStorage.getItem('console_password') || ''
@@ -261,6 +288,11 @@ function AccountsPage() {
         lifecycle={accountSummary?.lifecycle_status || {}}
         plans={accountSummary?.plan_state || {}}
         validity={accountSummary?.validity_status || {}}
+        platforms={accounts.reduce<Record<string, number>>((acc, a) => {
+          const p = a.platform || 'unknown'
+          acc[p] = (acc[p] || 0) + 1
+          return acc
+        }, {})}
       />
 
       {/* 筛选条 */}
@@ -271,6 +303,15 @@ function AccountsPage() {
               <Filter size={12} />
               筛选
             </div>
+            <FilterSelect
+              label='平台'
+              value={filterPlatform}
+              onChange={setFilterPlatform}
+              options={availablePlatforms.map((p) => ({
+                key: p,
+                label: PLATFORM_BADGE[p]?.label ?? p,
+              }))}
+            />
             <FilterSelect
               label='生命周期'
               value={filterLifecycle}
@@ -299,12 +340,13 @@ function AccountsPage() {
               }))}
             />
             <Input
-              placeholder='按邮箱 / SSO / 代理 / 备注 搜索'
+              placeholder='按邮箱 / SSO / 平台 / 代理 / 备注 搜索'
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className='max-w-[280px]'
             />
-            {(filterLifecycle ||
+            {(filterPlatform ||
+              filterLifecycle ||
               filterPlan ||
               filterValidity ||
               search) && (
@@ -313,6 +355,7 @@ function AccountsPage() {
                 size='sm'
                 onClick={() => {
                   setSearch('')
+                  setFilterPlatform('')
                   setFilterLifecycle('')
                   setFilterPlan('')
                   setFilterValidity('')
@@ -348,6 +391,7 @@ function AccountsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className='w-[60px]'>ID</TableHead>
+                    <TableHead className='w-[100px]'>平台</TableHead>
                     <TableHead>邮箱</TableHead>
                     <TableHead>SSO Token</TableHead>
                     <TableHead>生命周期</TableHead>
@@ -363,6 +407,9 @@ function AccountsPage() {
                     <TableRow key={a.id}>
                       <TableCell className='font-mono text-xs'>
                         #{a.id}
+                      </TableCell>
+                      <TableCell>
+                        <PlatformBadge value={a.platform} />
                       </TableCell>
                       <TableCell
                         className='max-w-[180px] truncate text-sm'
@@ -469,14 +516,21 @@ function AssetSummary({
   lifecycle,
   plans,
   validity,
+  platforms,
 }: {
   total: number
   lifecycle: Record<string, number>
   plans: Record<string, number>
   validity: Record<string, number>
+  platforms: Record<string, number>
 }) {
+  // 平台选项动态根据实际数据生成
+  const platformOptions = Object.keys(platforms)
+    .sort((a, b) => (platforms[b] ?? 0) - (platforms[a] ?? 0))
+    .map((k) => ({ key: k, label: PLATFORM_BADGE[k]?.label ?? k }))
+
   return (
-    <div className='grid gap-4 lg:grid-cols-4'>
+    <div className='grid gap-4 lg:grid-cols-5'>
       <Card>
         <CardContent className='py-4'>
           <div className='text-muted-foreground mb-1 text-xs tracking-wider uppercase'>
@@ -485,6 +539,11 @@ function AssetSummary({
           <div className='text-foreground text-3xl font-bold'>{total}</div>
         </CardContent>
       </Card>
+      <DistCard
+        title='平台分布'
+        data={platforms}
+        options={platformOptions}
+      />
       <DistCard
         title='生命周期'
         data={lifecycle}
@@ -706,6 +765,24 @@ function LifecycleBadge({ value }: { value: AccountLifecycle }) {
       <Icon size={10} className={cfg.color} />
       {cfg.label}
     </Badge>
+  )
+}
+
+function PlatformBadge({ value }: { value: string }) {
+  const key = (value || '').toLowerCase()
+  const cfg = PLATFORM_BADGE[key]
+  const label = cfg?.label ?? (value || '-')
+  const color = cfg?.color ?? 'bg-muted text-muted-foreground border-border'
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-md border px-2 py-0.5 font-mono text-[11px]',
+        color,
+      )}
+      title={value || '未知平台'}
+    >
+      {label}
+    </span>
   )
 }
 

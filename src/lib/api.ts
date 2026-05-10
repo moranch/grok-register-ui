@@ -297,12 +297,15 @@ export interface AccountEntry {
   task_id: number | null
   proxy_url: string
   status: string
+  platform: string
   lifecycle_status: AccountLifecycle
   plan_state: AccountPlanState
   validity_status: AccountValidity
   last_error: string
   last_checked_at: string
   notes: string
+  extra_json: string
+  exporter_status_json: string
   created_at: string
 }
 
