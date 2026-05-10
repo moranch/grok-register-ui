@@ -172,6 +172,15 @@ function AccountsPage() {
     fetchAccountSummary()
   }, [fetchAccounts, fetchAccountSummary])
 
+  // 有任务在跑时自动每 10 秒刷新账号列表
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchAccounts(2000)
+      fetchAccountSummary()
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [fetchAccounts, fetchAccountSummary])
+
   // 当前账户列表里出现过的所有平台 — 用于筛选下拉
   const availablePlatforms = useMemo(() => {
     const set = new Set<string>()
