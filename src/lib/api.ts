@@ -301,6 +301,7 @@ export interface AccountEntry {
   lifecycle_status: AccountLifecycle
   plan_state: AccountPlanState
   validity_status: AccountValidity
+  display_status: string
   last_error: string
   last_checked_at: string
   notes: string

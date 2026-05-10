@@ -185,7 +185,11 @@ function AccountsPage() {
     const q = search.trim().toLowerCase()
     return accounts.filter((a) => {
       if (filterPlatform && a.platform !== filterPlatform) return false
-      if (filterLifecycle && a.lifecycle_status !== filterLifecycle) return false
+      if (filterLifecycle) {
+        // 用综合 display_status 去匹配（和表格/概览卡一致）
+        const effective = a.display_status || a.lifecycle_status
+        if (effective !== filterLifecycle) return false
+      }
       if (filterPlan && a.plan_state !== filterPlan) return false
       if (filterValidity && a.validity_status !== filterValidity) return false
       if (!q) return true
@@ -285,7 +289,12 @@ function AccountsPage() {
       {/* 概览 */}
       <AssetSummary
         total={accountSummary?.total ?? accounts.length}
-        lifecycle={accountSummary?.lifecycle_status || {}}
+        lifecycle={accounts.reduce<Record<string, number>>((acc, a) => {
+          // 使用综合 display_status 聚合，而不是 lifecycle_status 单列
+          const key = a.display_status || a.lifecycle_status || 'registered'
+          acc[key] = (acc[key] || 0) + 1
+          return acc
+        }, {})}
         plans={accountSummary?.plan_state || {}}
         validity={accountSummary?.validity_status || {}}
         platforms={accounts.reduce<Record<string, number>>((acc, a) => {
@@ -313,7 +322,7 @@ function AccountsPage() {
               }))}
             />
             <FilterSelect
-              label='生命周期'
+              label='状态'
               value={filterLifecycle}
               onChange={setFilterLifecycle}
               options={LIFECYCLE_OPTIONS.map((o) => ({
@@ -394,7 +403,7 @@ function AccountsPage() {
                     <TableHead className='w-[100px]'>平台</TableHead>
                     <TableHead>邮箱</TableHead>
                     <TableHead>SSO Token</TableHead>
-                    <TableHead>生命周期</TableHead>
+                    <TableHead>状态</TableHead>
                     <TableHead>套餐</TableHead>
                     <TableHead>有效性</TableHead>
                     <TableHead>备注</TableHead>
@@ -436,7 +445,7 @@ function AccountsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <LifecycleBadge value={a.lifecycle_status} />
+                        <LifecycleBadge value={(a.display_status || a.lifecycle_status) as AccountLifecycle} />
                       </TableCell>
                       <TableCell>
                         <PlanBadge value={a.plan_state} />
@@ -545,7 +554,7 @@ function AssetSummary({
         options={platformOptions}
       />
       <DistCard
-        title='生命周期'
+        title='状态'
         data={lifecycle}
         options={LIFECYCLE_OPTIONS.map((o) => ({
           key: o.key,
