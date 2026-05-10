@@ -406,6 +406,7 @@ function AccountsPage() {
                     <TableHead>状态</TableHead>
                     <TableHead>套餐</TableHead>
                     <TableHead>有效性</TableHead>
+                    <TableHead>额度</TableHead>
                     <TableHead>备注</TableHead>
                     <TableHead>创建时间</TableHead>
                     <TableHead className='text-right'>操作</TableHead>
@@ -437,6 +438,9 @@ function AccountsPage() {
                       </TableCell>
                       <TableCell>
                         <ValidityBadge value={a.validity_status} />
+                      </TableCell>
+                      <TableCell>
+                        <UsageCell extraJson={a.extra_json} />
                       </TableCell>
                       <TableCell
                         className='max-w-[160px] truncate text-xs'
@@ -812,6 +816,7 @@ function EditDialog({
               最后一次错误：<span className='text-red-500'>{account.last_error}</span>
             </div>
           )}
+          <UsageDetail extraJson={account.extra_json} />
         </div>
         <div className='flex justify-end gap-2 border-t p-4'>
           <Button variant='outline' onClick={onClose}>
@@ -880,6 +885,141 @@ function TokensCell({ tokens, onCopy }: { tokens: AccountEntry['tokens']; onCopy
           </Button>
         </div>
       ))}
+    </div>
+  )
+}
+
+function UsageCell({ extraJson }: { extraJson: string }) {
+  const overview = useMemo(() => {
+    try {
+      const extra = JSON.parse(extraJson || '{}')
+      return extra.account_overview || {}
+    } catch {
+      return {}
+    }
+  }, [extraJson])
+
+  const breakdowns: Array<{
+    display_name?: string
+    current_usage?: number
+    usage_limit?: number
+    remaining_usage?: number
+    trial_status?: string
+  }> = overview.breakdowns || []
+
+  if (breakdowns.length === 0) {
+    return <span className='text-muted-foreground text-xs'>-</span>
+  }
+
+  return (
+    <div className='space-y-0.5'>
+      {breakdowns.slice(0, 3).map((b, i) => {
+        const name = b.display_name || `资源${i + 1}`
+        const used = b.current_usage ?? 0
+        const limit = b.usage_limit ?? 0
+        const pct = limit > 0 ? Math.round(((limit - used) / limit) * 100) : 0
+        return (
+          <div key={i} className='flex items-center gap-1 text-[10px]'>
+            <span className='text-muted-foreground w-[60px] shrink-0 truncate' title={name}>
+              {name}
+            </span>
+            <div className='bg-muted relative h-1.5 w-[40px] overflow-hidden rounded-full'>
+              <div
+                className={cn('h-full', pct > 50 ? 'bg-emerald-500' : pct > 20 ? 'bg-amber-500' : 'bg-red-500')}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <span className='w-[28px] text-right font-mono'>{pct}%</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function UsageDetail({ extraJson }: { extraJson: string }) {
+  const data = useMemo(() => {
+    try {
+      const extra = JSON.parse(extraJson || '{}')
+      const overview = extra.account_overview || {}
+      return {
+        plan_name: overview.plan_name || '',
+        user_email: overview.user_email || '',
+        user_status: overview.user_status || '',
+        breakdowns: (overview.breakdowns || []) as Array<{
+          display_name?: string
+          current_usage?: number
+          usage_limit?: number
+          remaining_usage?: number
+          next_reset_at?: string
+          trial_status?: string
+          trial_expiry?: string
+          trial_current_usage?: number
+          trial_usage_limit?: number
+        }>,
+      }
+    } catch {
+      return { plan_name: '', user_email: '', user_status: '', breakdowns: [] }
+    }
+  }, [extraJson])
+
+  if (!data.breakdowns.length && !data.plan_name) {
+    return null
+  }
+
+  return (
+    <div className='space-y-2 rounded-md border p-3'>
+      <div className='flex items-center justify-between'>
+        <Label className='text-xs font-medium'>用量 / 额度</Label>
+        {data.plan_name && (
+          <span className='text-[11px] text-muted-foreground'>套餐: {data.plan_name}</span>
+        )}
+      </div>
+      {data.user_email && (
+        <div className='text-[11px] text-muted-foreground'>邮箱: {data.user_email} · 状态: {data.user_status || '-'}</div>
+      )}
+      {data.breakdowns.length > 0 && (
+        <div className='space-y-2'>
+          {data.breakdowns.map((b, i) => {
+            const name = b.display_name || `资源${i + 1}`
+            const used = b.current_usage ?? 0
+            const limit = b.usage_limit ?? 0
+            const remaining = b.remaining_usage ?? (limit - used)
+            const pct = limit > 0 ? Math.round((remaining / limit) * 100) : 0
+            return (
+              <div key={i} className='space-y-1'>
+                <div className='flex items-center justify-between text-[11px]'>
+                  <span className='font-medium'>{name}</span>
+                  <span className='text-muted-foreground'>
+                    {used} / {limit} (剩余 {remaining})
+                  </span>
+                </div>
+                <div className='bg-muted relative h-2 w-full overflow-hidden rounded-full'>
+                  <div
+                    className={cn(
+                      'h-full transition-all',
+                      pct > 50 ? 'bg-emerald-500' : pct > 20 ? 'bg-amber-500' : 'bg-red-500'
+                    )}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                {b.next_reset_at && (
+                  <div className='text-[10px] text-muted-foreground'>
+                    重置时间: {b.next_reset_at}
+                  </div>
+                )}
+                {b.trial_status && (
+                  <div className='text-[10px] text-muted-foreground'>
+                    试用: {b.trial_status}
+                    {b.trial_expiry && ` · 到期: ${b.trial_expiry}`}
+                    {b.trial_usage_limit != null && ` · 额度: ${b.trial_current_usage ?? 0}/${b.trial_usage_limit}`}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
