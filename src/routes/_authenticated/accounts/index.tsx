@@ -633,6 +633,10 @@ function EditDialog({
     sso: account.sso || '',
     email: account.email || '',
     password: account.password || '',
+    session_token: account.tokens?.session_token || '',
+    access_token: account.tokens?.access_token || '',
+    refresh_token: account.tokens?.refresh_token || '',
+    id_token: account.tokens?.id_token || '',
   })
 
   return (
@@ -677,15 +681,49 @@ function EditDialog({
             />
           </div>
           <div className='space-y-2'>
-            <Label htmlFor='edit-sso'>SSO Token</Label>
-            <textarea
-              id='edit-sso'
-              placeholder='注册或登录后得到的 token，长串文本'
-              value={form.sso}
-              onChange={(e) => setForm({ ...form, sso: e.target.value })}
-              rows={3}
-              className='flex w-full resize-y rounded-md border bg-background px-3 py-2 font-mono text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-            />
+            <Label>Tokens</Label>
+            <div className='space-y-1.5 rounded-md border p-3'>
+              <div className='space-y-1'>
+                <Label className='text-[11px] text-muted-foreground'>Session Token</Label>
+                <textarea
+                  placeholder='session_token'
+                  value={form.session_token}
+                  onChange={(e) => setForm({ ...form, session_token: e.target.value })}
+                  rows={2}
+                  className='flex w-full resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-[11px] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                />
+              </div>
+              <div className='space-y-1'>
+                <Label className='text-[11px] text-muted-foreground'>Access Token</Label>
+                <textarea
+                  placeholder='access_token'
+                  value={form.access_token}
+                  onChange={(e) => setForm({ ...form, access_token: e.target.value })}
+                  rows={2}
+                  className='flex w-full resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-[11px] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                />
+              </div>
+              <div className='space-y-1'>
+                <Label className='text-[11px] text-muted-foreground'>Refresh Token</Label>
+                <textarea
+                  placeholder='refresh_token'
+                  value={form.refresh_token}
+                  onChange={(e) => setForm({ ...form, refresh_token: e.target.value })}
+                  rows={2}
+                  className='flex w-full resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-[11px] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                />
+              </div>
+              <div className='space-y-1'>
+                <Label className='text-[11px] text-muted-foreground'>ID Token</Label>
+                <textarea
+                  placeholder='id_token'
+                  value={form.id_token}
+                  onChange={(e) => setForm({ ...form, id_token: e.target.value })}
+                  rows={2}
+                  className='flex w-full resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-[11px] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                />
+              </div>
+            </div>
           </div>
           <div className='space-y-2'>
             <Label>生命周期</Label>
