@@ -302,6 +302,12 @@ export interface AccountEntry {
   plan_state: AccountPlanState
   validity_status: AccountValidity
   display_status: string
+  tokens: {
+    session_token: string
+    access_token: string
+    refresh_token: string
+    id_token: string
+  }
   last_error: string
   last_checked_at: string
   notes: string

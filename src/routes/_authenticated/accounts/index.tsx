@@ -402,7 +402,7 @@ function AccountsPage() {
                     <TableHead className='w-[60px]'>ID</TableHead>
                     <TableHead className='w-[100px]'>平台</TableHead>
                     <TableHead>邮箱</TableHead>
-                    <TableHead>SSO Token</TableHead>
+                    <TableHead>Tokens</TableHead>
                     <TableHead>状态</TableHead>
                     <TableHead>套餐</TableHead>
                     <TableHead>有效性</TableHead>
@@ -427,22 +427,7 @@ function AccountsPage() {
                         {a.email || <span className='text-muted-foreground'>-</span>}
                       </TableCell>
                       <TableCell>
-                        <div className='flex items-center gap-1'>
-                          <span
-                            className='max-w-[180px] truncate font-mono text-xs'
-                            title={a.sso}
-                          >
-                            {a.sso}
-                          </span>
-                          <Button
-                            variant='ghost'
-                            size='icon'
-                            className='h-6 w-6'
-                            onClick={() => copy(a.sso)}
-                          >
-                            <Copy size={11} />
-                          </Button>
-                        </div>
+                        <TokensCell tokens={a.tokens} onCopy={copy} />
                       </TableCell>
                       <TableCell>
                         <LifecycleBadge value={(a.display_status || a.lifecycle_status) as AccountLifecycle} />
@@ -829,6 +814,35 @@ function PlatformBadge({ value }: { value: string }) {
     >
       {label}
     </span>
+  )
+}
+
+function TokensCell({ tokens, onCopy }: { tokens: AccountEntry['tokens']; onCopy: (s: string) => void }) {
+  const entries = [
+    { label: 'Session', value: tokens?.session_token || '' },
+    { label: 'Access', value: tokens?.access_token || '' },
+    { label: 'Refresh', value: tokens?.refresh_token || '' },
+    { label: 'ID', value: tokens?.id_token || '' },
+  ].filter((e) => e.value)
+
+  if (entries.length === 0) {
+    return <span className='text-muted-foreground text-xs'>-</span>
+  }
+
+  return (
+    <div className='space-y-0.5'>
+      {entries.map((e) => (
+        <div key={e.label} className='flex items-center gap-1'>
+          <span className='text-muted-foreground w-[50px] shrink-0 text-[10px]'>{e.label}</span>
+          <span className='max-w-[140px] truncate font-mono text-[10px]' title={e.value}>
+            {e.value.slice(0, 20)}...
+          </span>
+          <Button variant='ghost' size='icon' className='h-5 w-5' onClick={() => onCopy(e.value)}>
+            <Copy size={10} />
+          </Button>
+        </div>
+      ))}
+    </div>
   )
 }
 
