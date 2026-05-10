@@ -470,7 +470,12 @@ function AccountsPage() {
                               try {
                                 const { data } = await accountApi.queryState(a.id)
                                 if (data.ok) {
-                                  toast.success(`状态已更新: ${data.plan_state || '-'}`)
+                                  const plan = data.plan_state || ''
+                                  if (plan && plan !== 'unknown') {
+                                    toast.success(`状态已更新: ${plan}`)
+                                  } else {
+                                    toast.info('查询成功，暂无套餐信息')
+                                  }
                                   fetchAccounts(2000)
                                   fetchAccountSummary()
                                 } else {
