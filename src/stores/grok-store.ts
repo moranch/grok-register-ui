@@ -102,6 +102,9 @@ interface GrokState {
       validity_status: AccountValidity
       notes: string
       last_error: string
+      sso: string
+      email: string
+      password: string
     }>
   ) => Promise<void>
   deleteAccount: (id: number) => Promise<void>

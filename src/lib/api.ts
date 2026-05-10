@@ -501,6 +501,9 @@ export const accountApi = {
       validity_status: AccountValidity
       notes: string
       last_error: string
+      sso: string
+      email: string
+      password: string
     }>
   ) => grokApi.patch<{ account: AccountEntry }>(`/accounts/${id}`, data),
   delete: (id: number) => grokApi.delete(`/accounts/${id}`),

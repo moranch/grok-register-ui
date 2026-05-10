@@ -634,6 +634,9 @@ function EditDialog({
       plan_state: AccountPlanState
       validity_status: AccountValidity
       notes: string
+      sso: string
+      email: string
+      password: string
     }>
   ) => void | Promise<void>
 }) {
@@ -642,6 +645,9 @@ function EditDialog({
     plan_state: account.plan_state,
     validity_status: account.validity_status,
     notes: account.notes || '',
+    sso: account.sso || '',
+    email: account.email || '',
+    password: account.password || '',
   })
 
   return (
@@ -650,7 +656,7 @@ function EditDialog({
       onClick={onClose}
     >
       <div
-        className='bg-card w-full max-w-xl rounded-xl border shadow-2xl'
+        className='bg-card max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl border shadow-2xl'
         onClick={(e) => e.stopPropagation()}
       >
         <div className='flex items-center justify-between border-b p-4'>
@@ -665,6 +671,37 @@ function EditDialog({
           </Button>
         </div>
         <div className='space-y-4 p-4'>
+          <div className='space-y-2'>
+            <Label htmlFor='edit-email'>邮箱</Label>
+            <Input
+              id='edit-email'
+              placeholder='账号邮箱'
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          </div>
+          <div className='space-y-2'>
+            <Label htmlFor='edit-password'>密码</Label>
+            <Input
+              id='edit-password'
+              type='text'
+              placeholder='明文密码（可选）'
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              className='font-mono text-xs'
+            />
+          </div>
+          <div className='space-y-2'>
+            <Label htmlFor='edit-sso'>SSO Token</Label>
+            <textarea
+              id='edit-sso'
+              placeholder='注册或登录后得到的 token，长串文本'
+              value={form.sso}
+              onChange={(e) => setForm({ ...form, sso: e.target.value })}
+              rows={3}
+              className='flex w-full resize-y rounded-md border bg-background px-3 py-2 font-mono text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+            />
+          </div>
           <div className='space-y-2'>
             <Label>生命周期</Label>
             <div className='grid grid-cols-5 gap-2'>
